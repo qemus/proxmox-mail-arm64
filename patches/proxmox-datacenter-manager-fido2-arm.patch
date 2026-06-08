@@ -1,0 +1,108 @@
+--- a/cli/proxmox-fido2/src/lib.rs	2026-06-08 14:42:13.007894039 +0000
++++ cli/proxmox-fido2/src/lib.rs	2026-06-08 14:43:20.245705767 +0000
+@@ -52,7 +52,7 @@
+         0x36 => Err(Error::PinRequired),
+         other => Err(Error::Other(format!(
+             "{what}: {:?}",
+-            unsafe { CStr::from_ptr((lib.fido_strerr)(other)) }.to_string_lossy()
++            unsafe { CStr::from_ptr((lib.fido_strerr)(other).cast()) }.to_string_lossy()
+         ))),
+     }
+ }
+@@ -524,9 +524,9 @@
+ 
+         let (manufacturer, product, path) = unsafe {
+             (
+-                CStr::from_ptr(manufacturer).to_string_lossy().to_string(),
+-                CStr::from_ptr(product).to_string_lossy().to_string(),
+-                CStr::from_ptr(path),
++                CStr::from_ptr(manufacturer.cast()).to_string_lossy().to_string(),
++                CStr::from_ptr(product.cast()).to_string_lossy().to_string(),
++                CStr::from_ptr(path.cast()),
+             )
+         };
+ 
+@@ -640,7 +640,7 @@
+ 
+         result_msg(
+             &self.lib,
+-            (self.lib.fido_dev_make_cred)(self.dev, cred.cred, pin),
++            (self.lib.fido_dev_make_cred)(self.dev, cred.cred, pin.cast()),
+             "failed to make credentials",
+         )?;
+ 
+@@ -663,7 +663,7 @@
+ 
+         result_msg(
+             &self.lib,
+-            (self.lib.fido_dev_get_assert)(self.dev, assert.assert, pin),
++            (self.lib.fido_dev_get_assert)(self.dev, assert.assert, pin.cast()),
+             "failed to get assertion",
+         )?;
+ 
+@@ -692,9 +692,9 @@
+         let extensions = (self.lib.fido_cbor_info_extensions_ptr)(info.info);
+         if !extensions.is_null() {
+             let len = (self.lib.fido_cbor_info_extensions_len)(info.info);
+-            let extensions = unsafe { std::slice::from_raw_parts(extensions as *const &i8, len) };
++            let extensions = unsafe { std::slice::from_raw_parts(extensions as *const *const i8, len) };
+             for ext in extensions {
+-                let name = unsafe { CStr::from_ptr(*ext) };
++                let name = unsafe { CStr::from_ptr((*ext).cast()) };
+                 if name.to_bytes() == b"hmac-secret" {
+                     options.hmac_secret = true;
+                     break;
+@@ -712,11 +712,11 @@
+             let len = (self.lib.fido_cbor_info_options_len)(info.info);
+ 
+             let option_names =
+-                unsafe { std::slice::from_raw_parts(option_names as *const &i8, len) };
++                unsafe { std::slice::from_raw_parts(option_names as *const *const i8, len) };
+             let option_values = unsafe { std::slice::from_raw_parts(option_values, len) };
+ 
+             for (name, value) in std::iter::zip(option_names, option_values) {
+-                let name = unsafe { CStr::from_ptr(*name) };
++                let name = unsafe { CStr::from_ptr((*name).cast()) };
+                 match name.to_bytes() {
+                     b"rk" => options.resident_key = *value != 0,
+                     b"clientPin" => options.client_pin = *value != 0,
+@@ -779,7 +779,7 @@
+         let id = CString::new(id).map_err(|_| format_err!("invalid bytes in relying party id"))?;
+         let name =
+             CString::new(name).map_err(|_| format_err!("invalid bytes in relying party name"))?;
+-        if (self.lib.fido_cred_set_rp)(self.cred, id.as_ptr(), name.as_ptr()) != 0 {
++        if (self.lib.fido_cred_set_rp)(self.cred, id.as_ptr().cast(), name.as_ptr().cast()) != 0 {
+             bail!("failed to set relying part information");
+         }
+         Ok(self)
+@@ -790,7 +790,7 @@
+     fn set_format(self, kind: &str) -> Result<Self, Error> {
+         let kind =
+             CString::new(kind).map_err(|_| format_err!("invalid bytes in format specification"))?;
+-        if (self.lib.fido_cred_set_fmt)(self.cred, kind.as_ptr()) != 0 {
++        if (self.lib.fido_cred_set_fmt)(self.cred, kind.as_ptr().cast()) != 0 {
+             bail!("failed to set fido format");
+         }
+         Ok(self)
+@@ -852,9 +852,9 @@
+             self.cred,
+             user_id.as_ptr(),
+             user_id.len(),
+-            user_name,
+-            display_name,
+-            icon,
++            user_name.cast(),
++            display_name.cast(),
++            icon.cast(),
+         ) != 0
+         {
+             bail!("failed to set user information");
+@@ -1001,7 +1001,7 @@
+     /// Set the relying party id.
+     pub fn set_relying_party(self, rpid: &str) -> Result<Self, Error> {
+         let rpid = CString::new(rpid).map_err(|_| format_err!("invalid bytes in relying party"))?;
+-        if (self.lib.fido_assert_set_rp)(self.assert, rpid.as_ptr()) != 0 {
++        if (self.lib.fido_assert_set_rp)(self.assert, rpid.as_ptr().cast()) != 0 {
+             bail!("failed to set relying party id");
+         }
+         Ok(self)

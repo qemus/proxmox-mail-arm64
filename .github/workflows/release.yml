@@ -77,9 +77,9 @@ jobs:
           baseimage="debian:trixie-slim"
           echo "DEB_DIST=Debian/Trixie" >> $GITHUB_ENV
           if [ "${RUNNER_DEBUG}" = "1" ]; then
-            docker buildx build -o packages --build-arg buildoptions="github cross=${{ env.latest_tag }} debug" --build-arg baseimage=${baseimage} --platform linux/arm64 -f .github/Dockerfile.crosscompile-arm64 .
+            docker buildx build -o packages --build-arg buildoptions="github cross=${{ env.latest_tag }} debug" --build-arg baseimage=${baseimage} -f .github/Dockerfile.crosscompile-arm64 .
           else
-            docker buildx build -o packages --build-arg buildoptions="github cross=${{ env.latest_tag }}" --build-arg baseimage=${baseimage} --platform linux/arm64 -f .github/Dockerfile.crosscompile-arm64 .
+            docker buildx build -o packages --build-arg buildoptions="github cross=${{ env.latest_tag }}" --build-arg baseimage=${baseimage} -f .github/Dockerfile.crosscompile-arm64 .
           fi
           sudo apt -y install apt-listchanges
           apt-listchanges --latest=1 -f text packages/proxmox-datacenter-manager_*.deb | sed -e '/^\(apt-listchanges.*\|[-]\+\)$/d' >> .github/PREBUILD.md

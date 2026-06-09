@@ -529,8 +529,7 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 #    Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
 #DEB
 
-#  ${SUDO} apt update
-  apt -y build-dep .
+  ${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
   make deb
 
   ls -lh

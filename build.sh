@@ -289,7 +289,9 @@ while [ "$#" -ge 1 ]; do
 		if [[ "$1" =~ cross=[0-9.-]+ ]]; then
 			PROXMOX_DM_VER="${1#cross=}"
 		fi
-		PACKAGE_ARCH=arm64
+
+		HOST_ARCH=arm64
+		export DEB_HOST_ARCH=arm64		
 		BUILD_PROFILES=${BUILD_PROFILES}",cross"
 		[[ ${BUILD_PROFILES} =~ nocheck ]] || BUILD_PROFILES=${BUILD_PROFILES}",nocheck"
 		export DEB_BUILD_OPTIONS="nocheck"

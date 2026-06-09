@@ -527,7 +527,7 @@ if [ "${PACKAGE_ARCH}" != "${HOST_ARCH}" ]; then
   export DEB_BUILD_OPTIONS="${DEB_BUILD_OPTIONS:+${DEB_BUILD_OPTIONS} }nostrip"
 fi
 
-${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
+#${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
 
 export DEB_VERSION=$(dpkg-parsechangelog -SVersion)
 export DEB_VERSION_UPSTREAM=$(dpkg-parsechangelog -SVersion | cut -d- -f1)
@@ -535,7 +535,7 @@ export DEB_VERSION_UPSTREAM=$(dpkg-parsechangelog -SVersion | cut -d- -f1)
 if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 
   # -B builds architecture-dependent packages only. This prevents rebuilding docs/UI.
-  dpkg-buildpackage -a${HOST_ARCH} -B -us -uc ${BUILD_PROFILES}
+ # dpkg-buildpackage -a${HOST_ARCH} -B -us -uc ${BUILD_PROFILES}
 
   download_package_with_fallback pdm proxmox-datacenter-manager-ui "${PACKAGES}" \
     "${DEB_VERSION}" "${DEB_VERSION_UPSTREAM}" "${PROXMOX_DM_VER}" >/dev/null
@@ -543,7 +543,7 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
   download_package_with_fallback pdm proxmox-datacenter-manager-docs "${PACKAGES}" \
     "${DEB_VERSION}" "${DEB_VERSION_UPSTREAM}" "${PROXMOX_DM_VER}" >/dev/null
 else
-  dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
+  #dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
 fi
 
 cd ..

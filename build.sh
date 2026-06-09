@@ -248,6 +248,7 @@ function download_release() {
 			curl -sSfL "${download_url}" -o "${PACKAGES}/${file}"
 		fi
 
+        [[ "$file" == *"dbgsym"* ]] && continue
         [[ "$file" == "proxmox-datacenter-manager-client"* ]] && continue
 
 		file_list+=("${PACKAGES}/${file}")

@@ -97,7 +97,7 @@ jobs:
         if: env.exists == 'false'
         run: |
           gh release create ${DEB_VERSION} \
-            --title "Version ${DEB_VERSION} (${DEB_DIST})" \
+            --title "v${DEB_VERSION}" \
             --notes-file .github/PREBUILD.md \
             --draft \
             --latest=false \

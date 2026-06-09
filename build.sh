@@ -517,17 +517,17 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
   cd ui
   set_package_info
 
-#  # Add Proxmox Datacenter Manager repository
-#  curl -sL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
-#       -o /usr/share/keyrings/proxmox-archive-keyring.gpg
-#
-#  cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/pdm-no-subs.sources
-#    Types: deb
-#    URIs: http://download.proxmox.com/debian/pdm
-#    Suites: trixie
-#    Components: pdm-no-subscription
-#    Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
-#DEB
+  # Add Proxmox Datacenter Manager repository
+  curl -sL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
+       -o /usr/share/keyrings/proxmox-archive-keyring.gpg
+
+  cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/pdm-no-subs.sources
+    Types: deb
+    URIs: http://download.proxmox.com/debian/pdm
+    Suites: trixie
+    Components: pdm-no-subscription
+    Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+DEB
 
   ${SUDO} apt -y build-dep ${BUILD_PROFILES} .
   make deb

@@ -526,10 +526,14 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 # Disable Debian cargo registry replacement
 perl -0pi -e 's@(\noverride_dh_auto_configure:\n)@\1\tmkdir -p debian/cargo_home\n\tprintf "[net]\\ngit-fetch-with-cli = true\\n" > debian/cargo_home/config.toml\n@' debian/rules
 
-sed -i '/cargo prepare-debian/d' debian/rules
-sed -i '/debian\/cargo_registry/d' debian/rules
+# Do not use Debian-packaged Rust crates
+sed -i '/dh-cargo\|cargo:native\|rustc:native\|librust-\|libstd-rust-dev/d' debian/control
 
-rm -rf debian/cargo_registry debian/cargo_home
+# Build arch-independent UI package
+sed -i '/^Package: proxmox-datacenter-manager-ui/,/^$/ s/^Architecture: any$/Architecture: all/' debian/control
+
+# Avoid stale local cargo registry dirs
+rm -rf debian/cargo_home debian/cargo_registry
 
   sed -i '/^Build-Depends:/,/^[^ ]/ {
   /librust-/d

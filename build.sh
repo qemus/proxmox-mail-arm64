@@ -35,6 +35,24 @@ function download_package() {
 	echo "${file}"
 }
 
+function download_package_with_fallback() {
+	repo=${1}
+	package=${2}
+	dest=${3}
+	shift 3
+
+	for version in "$@"; do
+		[ -n "${version}" ] || continue
+		if file=$(download_package "${repo}" "${package}" "${version}" "${dest}"); then
+			echo "${file}"
+			return 0
+		fi
+	done
+
+	echo "Error: package ${package} not found in any requested version: $*" >&2
+	return 1
+}
+
 function git_clone_or_fetch() {
 	url=${1}              # url/name.git
 	name_git=${url##*/}   # name.git
@@ -214,47 +232,6 @@ function set_package_info() {
 	else
 		sed -i "s#^\(Maintainer.*\)\$#\1\nOrigin: https://github.com/qemus/proxmox-datacenter-arm64#" debian/control
 	fi
-}
-
-
-function patch_section_has_key() {
-	cargo_toml=${1}
-	crate_name=${2}
-
-	awk -v crate_name="${crate_name}" '
-		/^\[patch\.crates-io\]$/ { in_patch=1; next }
-		/^\[/ { in_patch=0 }
-		in_patch && $0 ~ "^[[:space:]]*" crate_name "[[:space:]]*=" { found=1 }
-		END { exit found ? 0 : 1 }
-	' "${cargo_toml}"
-}
-
-function append_local_proxmox_patches() {
-	cargo_toml=${1}
-	proxmox_root=${2}
-	manifest_dir=$(dirname "$(realpath "${cargo_toml}")")
-	proxmox_root=$(realpath "${proxmox_root}")
-
-	if [ ! -d "${proxmox_root}" ]; then
-		echo "Error: proxmox source tree not found: ${proxmox_root}" >&2
-		return 1
-	fi
-
-	grep -q '^\[patch\.crates-io\]$' "${cargo_toml}" || printf '\n[patch.crates-io]\n' >>"${cargo_toml}"
-
-	find "${proxmox_root}" -type f -name Cargo.toml \
-		-not -path '*/target/*' \
-		-not -path '*/debian/*' \
-		-print | sort | while read -r crate_toml; do
-		crate_dir=$(dirname "$(realpath "${crate_toml}")")
-		crate_name=$(sed -n '0,/^\[package\]/{/^name[[:space:]]*=[[:space:]]*"/s/^name[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p}' "${crate_toml}" | head -n1)
-
-		[ -n "${crate_name}" ] || continue
-		patch_section_has_key "${cargo_toml}" "${crate_name}" && continue
-
-		rel_path=$(realpath --relative-to="${manifest_dir}" "${crate_dir}")
-		printf '%s = { path = "%s" }\n' "${crate_name}" "${rel_path}" >>"${cargo_toml}"
-	done
 }
 
 file_list=()
@@ -546,136 +523,20 @@ if [ "${PACKAGE_ARCH}" != "${HOST_ARCH}" ]; then
   export DEB_BUILD_OPTIONS="${DEB_BUILD_OPTIONS:+${DEB_BUILD_OPTIONS} }nostrip"
 fi
 
-#${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
+${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
 
 export DEB_VERSION=$(dpkg-parsechangelog -SVersion)
 export DEB_VERSION_UPSTREAM=$(dpkg-parsechangelog -SVersion | cut -d- -f1)
 
-#dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
-
 if [[ "${BUILD_PROFILES}" =~ cross ]]; then
-  (
-    cd ui
-    set_package_info
+  # For the ARM64 port we build architecture-dependent packages here.
+  dpkg-buildpackage -a${HOST_ARCH} -B -us -uc ${BUILD_PROFILES}
 
-    echo "Preparing UI build"
-
-    # The UI package contains static web assets, so make it architecture-independent.
-    sed -i '/^Package: proxmox-datacenter-manager-ui/,/^$/ s/^Architecture: any$/Architecture: all/' debian/control
-
-    # We build the UI with rustup/Cargo instead of Debian-packaged Rust crates.
-    # Remove Debian Rust crate build dependencies so dpkg-buildpackage -d is the only bypass needed.
-    sed -i '/dh-cargo\|cargo:native\|rustc:native\|librust-\|libstd-rust-dev/d' debian/control
-    sed -i '/^Build-Depends:/,/^[^ ]/ { /librust-/d }' debian/control
-
-    # The UI must not inherit the ARM64 cross-build environment from the server build.
-    # It builds WebAssembly and an Architecture: all Debian package in the native build root.
-    unset CARGO_BUILD_TARGET
-    unset TARGET
-    unset CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER
-    unset CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER
-    unset PKG_CONFIG
-    unset PKG_CONFIG_LIBDIR
-    unset CC
-    unset CXX
-    unset DEB_HOST_MULTIARCH
-    export DEB_HOST_ARCH="$(dpkg-architecture -qDEB_BUILD_ARCH)"
-    export DEB_HOST_GNU_TYPE="$(dpkg-architecture -qDEB_BUILD_GNU_TYPE)"
-    export DEB_HOST_RUST_TYPE="$(rustc -vV | awk '/^host:/ { print $2 }')"
-
-    echo "UI build architecture: $(dpkg --print-architecture)"
-    echo "UI Rust host: ${DEB_HOST_RUST_TYPE}"
-
-    # Ensure the pwt-assets submodule exists. PDM stores it as ui/pwt-assets.
-    if [ ! -f pwt-assets/scss/crisp-yew-style.scss ]; then
-      echo "Initializing ui/pwt-assets submodule"
-      git -C .. submodule sync --recursive
-      git -C .. config submodule.ui/pwt-assets.url https://github.com/proxmox/proxmox-yew-widget-toolkit-assets.git
-      git -C .. submodule update --init --recursive ui/pwt-assets || {
-        echo "Submodule update failed, cloning pwt-assets directly"
-        rm -rf pwt-assets
-        git clone --depth=1 https://github.com/proxmox/proxmox-yew-widget-toolkit-assets.git pwt-assets
-      }
-    fi
-
-    if [ ! -f pwt-assets/scss/crisp-yew-style.scss ]; then
-      echo "Error: pwt-assets is still missing after submodule/clone attempt" >&2
-      find .. -maxdepth 4 -iname '*yew-style*' -o -iname '*pwt*' >&2
-      exit 1
-    fi
-
-    # Add Proxmox repositories needed for proxmox-wasm-builder and rust-grass.
-    curl -fsSL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
-      -o /usr/share/keyrings/proxmox-archive-keyring.gpg
-
-    cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/pdm.sources
-      Types: deb
-      URIs: http://download.proxmox.com/debian/pdm
-      Suites: trixie
-      Components: pdm-no-subscription pdm-test
-      Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
-DEB
-
-    cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/proxmox-devel.sources
-      Types: deb
-      URIs: http://download.proxmox.com/debian/devel
-      Suites: trixie
-      Components: main
-      Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
-DEB
-
-    ${SUDO} apt update
-    ${SUDO} apt install -y \
-      cargo \
-      dh-cargo \
-      esbuild \
-      fonts-font-awesome \
-      proxmox-wasm-builder \
-      rust-grass
-
-    # dh-cargo normally replaces crates.io with debian/cargo_registry.
-    # That breaks here because the needed librust-* packages are not available.
-    # Replace the prepare-debian line with a normal Cargo config.
-    sed -i '/$(CARGO) prepare-debian/c\
-	mkdir -p debian/cargo_home\
-	printf "[net]\\ngit-fetch-with-cli = true\\n" > debian/cargo_home/config.toml' debian/rules
-
-    # The original rules expect rustflags generated by prepare-debian. Without it,
-    # the grep would fail. Set the wasm linker explicitly instead.
-    sed -i '/grep "\^rustflags = "/c\
-	echo '\''linker = "rust-lld"'\'' >> debian/cargo_home/config.toml' debian/rules
-
-    rm -rf debian/cargo_home debian/cargo_registry
-
-    echo "Relevant debian/rules lines after patching:"
-    grep -n 'prepare-debian\|cargo_home\|cargo_registry\|rust-lld' debian/rules || true
-
-    # Cargo.lock can contain checksums from Debian's local registry. Remove it when switching to crates.io.
-    rm -f Cargo.lock ../Cargo.lock
-
-    # The UI depends on Proxmox crates that are not published on crates.io.
-    # Patch both the workspace manifest and the UI manifest to the checked-out proxmox tree.
-    append_local_proxmox_patches ../Cargo.toml ../../proxmox
-    append_local_proxmox_patches Cargo.toml ../../proxmox
-
-    echo "Relevant UI Cargo patches:"
-    grep -A120 '^\[patch\.crates-io\]' ../Cargo.toml || true
-    grep -A120 '^\[patch\.crates-io\]' Cargo.toml || true
-
-    CARGO_HOME=/root/.cargo dpkg-buildpackage -A -d -us -uc
-
-    shopt -s nullglob
-    ui_debs=(../proxmox-datacenter-manager-ui_*_all.deb)
-    shopt -u nullglob
-
-    if [ "${#ui_debs[@]}" -eq 0 ]; then
-      echo "Error: no UI .deb was produced" >&2
-      find .. -maxdepth 1 -type f -name 'proxmox-datacenter-manager-ui_*' -ls >&2
-      exit 1
-    fi
-
-    mv -f "${ui_debs[@]}" "${PACKAGES}"
-  )
+  echo "Downloading architecture-independent PDM packages instead of building them"
+  download_package_with_fallback pdm proxmox-datacenter-manager-ui "${PACKAGES}"     "${DEB_VERSION}" "${DEB_VERSION_UPSTREAM}" "${PROXMOX_DM_VER}" >/dev/null
+  download_package_with_fallback pdm proxmox-datacenter-manager-docs "${PACKAGES}"     "${DEB_VERSION}" "${DEB_VERSION_UPSTREAM}" "${PROXMOX_DM_VER}" >/dev/null
+else
+  dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
 fi
 
 cd ..
@@ -701,8 +562,15 @@ PVE_XTERMJS_GIT="1209ea0d5bda89fec71484d09f784bd3b94fafaf"
 PROXMOX_XTERMJS_GIT="deb32a6c4a21bea0d72059de0835fde504296bf0"
 PROXMOX_TERMPROXY_VER="2.1.0"
 
-if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb" ] ||
-   [ ! -e "${PACKAGES}/pve-xtermjs_${PVE_XTERMJS_VER}_all.deb" ]; then
+# pve-xtermjs is Architecture: all, so download it instead of building it.
+if [ ! -e "${PACKAGES}/pve-xtermjs_${PVE_XTERMJS_VER}_all.deb" ]; then
+	download_package_with_fallback devel pve-xtermjs "${PACKAGES}" "${PVE_XTERMJS_VER}" >/dev/null
+else
+	echo "pve-xtermjs up-to-date"
+fi
+
+# proxmox-termproxy is architecture-dependent and still needs an ARM64 build.
+if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb" ]; then
 	git_clone_or_fetch https://git.proxmox.com/git/pve-xtermjs.git
 	git_clean_and_checkout ${PVE_XTERMJS_GIT} pve-xtermjs
 	patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-arm.patch"
@@ -715,14 +583,10 @@ if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.d
 	set_package_info
 	${SUDO} apt -y -a${HOST_ARCH} build-dep .
 	BUILD_MODE=release make deb
-	cd ..
-	cd xterm.js
-	make deb
-	mv -f pve-xtermjs_${PVE_XTERMJS_VER}_all.deb "${PACKAGES}"
-	cd ..
+	cd ../..
 	mv -f proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb "${PACKAGES}"
 else
-  echo "pve-xtermjs up-to-date"
+	echo "proxmox-termproxy up-to-date"
 fi
 
 PROXMOX_JOURNALREADER_VER="1.6-1"

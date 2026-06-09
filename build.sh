@@ -505,12 +505,12 @@ if [ "${PACKAGE_ARCH}" != "${HOST_ARCH}" ]; then
   export DEB_BUILD_OPTIONS="${DEB_BUILD_OPTIONS:+${DEB_BUILD_OPTIONS} }nostrip"
 fi
 
-${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
+#${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
 
 export DEB_VERSION=$(dpkg-parsechangelog -SVersion)
 export DEB_VERSION_UPSTREAM=$(dpkg-parsechangelog -SVersion | cut -d- -f1)
 
-dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
+#dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
 
 if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 
@@ -529,7 +529,7 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 #    Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
 #DEB
 
-  ${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
+  ${SUDO} apt -y build-dep ${BUILD_PROFILES} .
   make deb
 
   ls -lh

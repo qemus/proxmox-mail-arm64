@@ -543,18 +543,17 @@ EOF
   sed -i '/^Package: proxmox-datacenter-manager-ui/,/^$/ s/^Architecture: any$/Architecture: all/' \
   debian/control
 
-  # Fix missing pwt-assets
-PWT_SCSS="$(find /usr/share /usr/lib -path '*/scss/crisp-yew-style.scss' -print -quit)"
+# Fix missing pwt-assets
+PWT_SCSS="$(find "${SOURCES}/proxmox" -path '*/pwt-assets/scss/crisp-yew-style.scss' -print -quit)"
 echo "PWT_SCSS=$PWT_SCSS"
+
+test -n "$PWT_SCSS"
 
 PWT_ASSETS="$(dirname "$(dirname "$PWT_SCSS")")"
 echo "PWT_ASSETS=$PWT_ASSETS"
 
-test -n "$PWT_SCSS"
-test -d "$PWT_ASSETS/scss"
-
 rm -rf pwt-assets
-cp -a "$PWT_ASSETS" pwt-assets
+ln -s "$PWT_ASSETS" pwt-assets
 
   # Add Proxmox Datacenter Manager repository
   curl -sL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \

@@ -377,9 +377,11 @@ PACKAGES_PDM=$(load_packages http://download.proxmox.com/debian/pdm/dists/trixie
 
 echo "Download dependencies"
 EXTJS_VER=(">=" "7~")
+PDM_I18N_VER=(">=" "3.6.0")
 PROXMOX_ACME_VER=(">=" "1.7.0")
 PROXMOX_WIDGETTOOLKIT_VER=(">=" "5.0.2")
 if [ "${BUILD_PACKAGE}" = "server" ]; then
+    download_package pdm pdm-i18n "${PDM_I18N_VER[@]}" "${PACKAGES}" >/dev/null
 	libjs_extjs="$(download_package pdm libjs-extjs "${EXTJS_VER[@]}" "${PACKAGES}")"
 	proxmox_widget_toolkit="$(download_package pdm proxmox-widget-toolkit "${PROXMOX_WIDGETTOOLKIT_VER[@]}" "${PACKAGES}")"
 	download_package pdm libproxmox-acme-plugins "${PROXMOX_ACME_VER[@]}" "${PACKAGES}" >/dev/null

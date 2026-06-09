@@ -408,7 +408,7 @@ PROXMOX_DM_GIT=""
 PROXMOX_GIT=""
 
 if [ -e "${PACKAGES}/proxmox-datacenter-manager-${BUILD_PACKAGE}_${PROXMOX_DM_VER}_${PACKAGE_ARCH}.deb" ]; then
-	echo "proxmox-datacenter-manager up-to-date" && exit 0
+  echo "proxmox-datacenter-manager up-to-date" && exit 0
 fi
 
 git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
@@ -418,17 +418,19 @@ echo "Resolving commit hashes for version ${PROXMOX_DM_VER}..."
 
 PROXMOX_DM_GIT=$(resolve_dm_commit "${PROXMOX_DM_VER}" proxmox-datacenter-manager) || true
 if [ -z "${PROXMOX_DM_GIT}" ]; then
-	echo "Error: Could not resolve proxmox-datacenter-manager commit for version ${PROXMOX_DM_VER}" >&2
-	exit 1
+  echo "Error: Could not resolve proxmox-datacenter-manager commit for version ${PROXMOX_DM_VER}" >&2
+  exit 1
 fi
+
 echo "Using proxmox-datacenter-manager commit: ${PROXMOX_DM_GIT}"
 
 PROXMOX_GIT=$(resolve_proxmox_commit "${PROXMOX_DM_GIT}" proxmox-datacenter-manager proxmox) || true
 if [ -z "${PROXMOX_GIT}" ]; then
-	echo "Error: Could not resolve proxmox commit for version ${PROXMOX_DM_VER}" >&2
-	exit 1
+  echo "Error: Could not resolve proxmox commit for version ${PROXMOX_DM_VER}" >&2
+  exit 1
 fi
-echo "Using proxmox commit: ${PROXMOX_GIT}"
+
+echo "Using Proxmox commit: ${PROXMOX_GIT}"
 
 git_clean_and_checkout ${PROXMOX_GIT} proxmox
 git_clean_and_checkout ${PROXMOX_DM_GIT} proxmox-datacenter-manager
@@ -492,9 +494,6 @@ endif
 	sed -i 's|$(COMPILEDIR)/docgen apidata.js|qemu-aarch64 $(COMPILEDIR)/docgen apidata.js|' proxmox-datacenter-manager/docs/api-viewer/Makefile
 fi
 
-# Avoid parallel docs install races under dh_auto_install / make -jN.
-sed -i 's/^install: install_manual_pages install_html install_pdf$/install:\n\t$(MAKE) install_manual_pages\n\t$(MAKE) install_html\n\t$(MAKE) install_pdf/' proxmox-datacenter-manager/docs/Makefile
-
 cd proxmox-datacenter-manager/
 set_package_info
 
@@ -531,7 +530,8 @@ PVE_XTERMJS_VER="6.0.0-1"
 PVE_XTERMJS_GIT="1209ea0d5bda89fec71484d09f784bd3b94fafaf"
 PROXMOX_XTERMJS_GIT="deb32a6c4a21bea0d72059de0835fde504296bf0"
 PROXMOX_TERMPROXY_VER="2.1.0"
-if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${PACKAGE_ARCH}.deb" ] ||
+
+if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb" ] ||
    [ ! -e "${PACKAGES}/pve-xtermjs_${PVE_XTERMJS_VER}_all.deb" ]; then
 	git_clone_or_fetch https://git.proxmox.com/git/pve-xtermjs.git
 	git_clean_and_checkout ${PVE_XTERMJS_GIT} pve-xtermjs
@@ -543,14 +543,14 @@ if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${PACKAGE_ARCH
 	git_clean_and_checkout ${PROXMOX_XTERMJS_GIT} proxmox
 	cd termproxy
 	set_package_info
-	${SUDO} apt -y -a${PACKAGE_ARCH} build-dep .
+	${SUDO} apt -y -a${HOST_ARCH} build-dep .
 	BUILD_MODE=release make deb
 	cd ..
 	cd xterm.js
 	make deb
 	mv -f pve-xtermjs_${PVE_XTERMJS_VER}_all.deb "${PACKAGES}"
 	cd ..
-	mv -f proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${PACKAGE_ARCH}.deb "${PACKAGES}"
+	mv -f proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb "${PACKAGES}"
 else
 	echo "pve-xtermjs up-to-date"
 fi

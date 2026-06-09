@@ -76,14 +76,12 @@ dpkg --add-architecture arm64
 ```bash
 apt update && apt-get install -y --no-install-recommends \
 	build-essential crossbuild-essential-arm64 curl ca-certificates sudo git lintian jq rsync \
-	pkg-config pkgconf:arm64 libudev-dev:arm64 libssl-dev:arm64 libapt-pkg-dev:arm64 apt:amd64 \
+	pkg-config pkgconf:arm64 libudev-dev:arm64 libssl-dev:arm64 libapt-pkg-dev:arm64 \
 	libclang-dev libpam0g-dev:arm64 libcrypt-dev:arm64 libsystemd-dev:arm64 \
 	libacl1-dev:arm64 uuid-dev:arm64 libfuse3-dev:arm64 libldap2-dev:arm64 \
 	libzstd-dev:arm64 zlib1g-dev:arm64 nettle-dev:arm64 \
 	qemu-user qemu-user-binfmt patchelf
 ```
-
-`apt:amd64` is necessary because `libapt-pkg-dev:arm64` would break the dependencies without it.
 
 ### Install `rustup` and add target arch
 

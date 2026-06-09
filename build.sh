@@ -516,9 +516,8 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 
   cd ui
   set_package_info
-
-  # Get missing stylesheet assets
-  git clone --depth=1 https://git.proxmox.com/git/proxmox-yew-widget-toolkit.git pwt-assets
+  
+  ln -s /usr/share/proxmox-widget-toolkit/pwt-assets pwt-assets
 
   # Stop Debian cargo wrapper from replacing crates.io with debian/cargo_registry
   rm -rf debian/cargo_home debian/cargo_registry

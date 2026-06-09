@@ -508,6 +508,17 @@ export DEB_VERSION=$(dpkg-parsechangelog -SVersion)
 export DEB_VERSION_UPSTREAM=$(dpkg-parsechangelog -SVersion | cut -d- -f1)
 
 dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
+
+cd ui
+
+${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
+dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
+
+ls -lh
+exit 1
+
+cd ..
+
 cd ..
 
 shopt -s nullglob

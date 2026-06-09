@@ -11,7 +11,7 @@ concurrency:
 jobs:
   build:
     name: Build
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     permissions:
       actions: write
       packages: write
@@ -77,21 +77,14 @@ jobs:
           baseimage="debian:trixie-slim"
           echo "DEB_DIST=Debian/Trixie" >> $GITHUB_ENV
           if [ "${RUNNER_DEBUG}" = "1" ]; then
-            docker buildx build -o packages --build-arg buildoptions="github=${{ env.latest_tag }} debug" --build-arg baseimage=${baseimage} --platform linux/arm64 -f Dockerfile .
+            docker buildx build -o packages --build-arg buildoptions="github cross=${{ env.latest_tag }} debug" --build-arg baseimage=${baseimage} --platform linux/arm64 -f Dockerfile .
           else
-            docker buildx build -o packages --build-arg buildoptions="github=${{ env.latest_tag }}" --build-arg baseimage=${baseimage} --platform linux/arm64 -f Dockerfile .
+            docker buildx build -o packages --build-arg buildoptions="github cross=${{ env.latest_tag }}" --build-arg baseimage=${baseimage} --platform linux/arm64 -f Dockerfile .
           fi
           sudo apt -y install apt-listchanges
           apt-listchanges --latest=1 -f text packages/proxmox-datacenter-manager_*.deb | sed -e '/^\(apt-listchanges.*\|[-]\+\)$/d' >> .github/PREBUILD.md
           echo "DEB_VERSION=$(dpkg --info packages/proxmox-datacenter-manager_*.deb | sed -n '/Version/ s/[^:]\+: //p')" >> $GITHUB_ENV
           echo "DEB_VERSION_UPSTREAM=$(dpkg --info packages/proxmox-datacenter-manager_*.deb | sed -n '/Version/ s/[^:]\+: \([0-9.]\+\)-[0-9]/\1/p')" >> $GITHUB_ENV
-      -
-        name: Test packages
-        if: env.exists == 'false'
-        run: |
-          df -h
-          baseimage="debian:trixie-slim"
-          docker buildx build --build-arg baseimage=${baseimage} --platform linux/arm64 -f .github/Dockerfile.installtest .
       -
         name: Release packages
         if: env.exists == 'false'

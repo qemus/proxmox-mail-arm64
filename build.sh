@@ -542,7 +542,7 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 
   download_package_with_fallback pdm proxmox-datacenter-manager-docs "${PACKAGES}" \
     "${DEB_VERSION}" "${DEB_VERSION_UPSTREAM}" "${PROXMOX_DM_VER}" >/dev/null
-else
+#else
   #dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
 fi
 

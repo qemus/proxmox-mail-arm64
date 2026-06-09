@@ -530,6 +530,7 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 #DEB
 
 #  ${SUDO} apt update
+  apt -y build-dep .
   make deb
 
   ls -lh

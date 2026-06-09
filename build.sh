@@ -518,6 +518,9 @@ artifacts=(
 )
 shopt -u nullglob
 
+ls -lh
+exit 55
+
 if [ "${#artifacts[@]}" -eq 0 ]; then
   echo "Error: no build artifacts found" >&2
   ls -lh

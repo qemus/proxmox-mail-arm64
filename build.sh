@@ -410,7 +410,7 @@ PROXMOX_DM_VER="${PROXMOX_DM_VER%%-*}"
 PROXMOX_DM_GIT=""
 PROXMOX_GIT=""
 
-if [ -e "${PACKAGES}/proxmox-datacenter-manager-${BUILD_PACKAGE}_${PROXMOX_DM_VER}_${PACKAGE_ARCH}.deb" ]; then
+if [ -e "${PACKAGES}/proxmox-datacenter-manager_${PROXMOX_DM_VER}_${HOST_ARCH}.deb" ] && { [[ ! "${BUILD_PROFILES}" =~ cross ]] || [ -e "${PACKAGES}/proxmox-datacenter-manager-ui_${PROXMOX_DM_VER}_all.deb" ]; }; then
   echo "proxmox-datacenter-manager up-to-date" && exit 0
 fi
 
@@ -505,105 +505,135 @@ if [ "${PACKAGE_ARCH}" != "${HOST_ARCH}" ]; then
   export DEB_BUILD_OPTIONS="${DEB_BUILD_OPTIONS:+${DEB_BUILD_OPTIONS} }nostrip"
 fi
 
-#${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
+${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
 
 export DEB_VERSION=$(dpkg-parsechangelog -SVersion)
 export DEB_VERSION_UPSTREAM=$(dpkg-parsechangelog -SVersion | cut -d- -f1)
 
-#dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
+dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
 
 if [[ "${BUILD_PROFILES}" =~ cross ]]; then
+  (
+    cd ui
+    set_package_info
 
-  cd ui
-  set_package_info
+    echo "Preparing UI build"
 
-  # UI package: do not use Debian-packaged Rust crates
-  sed -i '/dh-cargo\|cargo:native\|rustc:native\|librust-\|libstd-rust-dev/d' debian/control
+    # The UI package contains static web assets, so make it architecture-independent.
+    sed -i '/^Package: proxmox-datacenter-manager-ui/,/^$/ s/^Architecture: any$/Architecture: all/' debian/control
 
-  # UI should be arch-independent
-  sed -i '/^Package: proxmox-datacenter-manager-ui/,/^$/ s/^Architecture: any$/Architecture: all/' debian/control
+    # We build the UI with rustup/Cargo instead of Debian-packaged Rust crates.
+    # Remove Debian Rust crate build dependencies so dpkg-buildpackage -d is the only bypass needed.
+    sed -i '/dh-cargo\|cargo:native\|rustc:native\|librust-\|libstd-rust-dev/d' debian/control
+    sed -i '/^Build-Depends:/,/^[^ ]/ { /librust-/d }' debian/control
 
-# Disable Debian cargo registry replacement
-perl -0pi -e 's@(\noverride_dh_auto_configure:\n)@\1\tmkdir -p debian/cargo_home\n\tprintf "[net]\\ngit-fetch-with-cli = true\\n" > debian/cargo_home/config.toml\n@' debian/rules
+    # The UI must not inherit the ARM64 cross-build environment from the server build.
+    # It builds WebAssembly and an Architecture: all Debian package in the native build root.
+    unset CARGO_BUILD_TARGET
+    unset TARGET
+    unset CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER
+    unset CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER
+    unset PKG_CONFIG
+    unset PKG_CONFIG_LIBDIR
+    unset CC
+    unset CXX
+    unset DEB_HOST_MULTIARCH
+    export DEB_HOST_ARCH="$(dpkg-architecture -qDEB_BUILD_ARCH)"
+    export DEB_HOST_GNU_TYPE="$(dpkg-architecture -qDEB_BUILD_GNU_TYPE)"
+    export DEB_HOST_RUST_TYPE="$(rustc -vV | awk '/^host:/ { print $2 }')"
 
-# Do not use Debian-packaged Rust crates
-sed -i '/dh-cargo\|cargo:native\|rustc:native\|librust-\|libstd-rust-dev/d' debian/control
+    echo "UI build architecture: $(dpkg --print-architecture)"
+    echo "UI Rust host: ${DEB_HOST_RUST_TYPE}"
 
-# Build arch-independent UI package
-sed -i '/^Package: proxmox-datacenter-manager-ui/,/^$/ s/^Architecture: any$/Architecture: all/' debian/control
+    # Ensure the pwt-assets submodule exists. PDM stores it as ui/pwt-assets.
+    if [ ! -f pwt-assets/scss/crisp-yew-style.scss ]; then
+      echo "Initializing ui/pwt-assets submodule"
+      git -C .. submodule sync --recursive
+      git -C .. config submodule.ui/pwt-assets.url https://github.com/proxmox/proxmox-yew-widget-toolkit-assets.git
+      git -C .. submodule update --init --recursive ui/pwt-assets || {
+        echo "Submodule update failed, cloning pwt-assets directly"
+        rm -rf pwt-assets
+        git clone --depth=1 https://github.com/proxmox/proxmox-yew-widget-toolkit-assets.git pwt-assets
+      }
+    fi
 
-# Avoid stale local cargo registry dirs
-rm -rf debian/cargo_home debian/cargo_registry
+    if [ ! -f pwt-assets/scss/crisp-yew-style.scss ]; then
+      echo "Error: pwt-assets is still missing after submodule/clone attempt" >&2
+      find .. -maxdepth 4 -iname '*yew-style*' -o -iname '*pwt*' >&2
+      exit 1
+    fi
+    ls -l pwt-assets/scss/crisp-yew-style.scss
 
-  sed -i '/^Build-Depends:/,/^[^ ]/ {
-  /librust-/d
-}' debian/control
+    # Add Proxmox repositories needed for proxmox-wasm-builder and rust-grass.
+    curl -fsSL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
+      -o /usr/share/keyrings/proxmox-archive-keyring.gpg
 
-  sed -i '/^Package: proxmox-datacenter-manager-ui/,/^$/ s/^Architecture: any$/Architecture: all/' \
-  debian/control
-
-# Fix missing pwt-assets
-PWT_SCSS="$(find "${SOURCES}" -path '*/pwt-assets/scss/crisp-yew-style.scss' -print -quit)"
-
-if [ -z "$PWT_SCSS" ]; then
-  echo "Error: could not find pwt-assets/scss/crisp-yew-style.scss" >&2
-  echo "Available matching files:" >&2
-  find "${SOURCES}" -iname '*yew-style*' -o -iname '*crisp*' -o -iname '*pwt*' >&2
-  exit 1
-fi
-
-PWT_ASSETS="$(dirname "$(dirname "$PWT_SCSS")")"
-
-rm -rf pwt-assets
-ln -s "$PWT_ASSETS" pwt-assets
-ls -l pwt-assets/scss/crisp-yew-style.scss
-
-  # Add Proxmox Datacenter Manager repository
-  curl -sL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
-       -o /usr/share/keyrings/proxmox-archive-keyring.gpg
-
-  cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/pdm.sources
-    Types: deb
-    URIs: http://download.proxmox.com/debian/pdm
-    Suites: trixie
-    Components: pdm-no-subscription pdm-test
-    Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+    cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/pdm.sources
+      Types: deb
+      URIs: http://download.proxmox.com/debian/pdm
+      Suites: trixie
+      Components: pdm-no-subscription pdm-test
+      Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
 DEB
 
-   cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/proxmox-devel.sources
-     Types: deb
-     URIs: http://download.proxmox.com/debian/devel
-     Suites: trixie
-     Components: main
-     Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+    cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/proxmox-devel.sources
+      Types: deb
+      URIs: http://download.proxmox.com/debian/devel
+      Suites: trixie
+      Components: main
+      Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
 DEB
 
-  ${SUDO} apt update
-  ${SUDO} apt install -y \
-  dh-cargo \
-  cargo \
-  esbuild \
-  fonts-font-awesome \
-  proxmox-wasm-builder \
-  rust-grass
+    ${SUDO} apt update
+    ${SUDO} apt install -y \
+      cargo \
+      dh-cargo \
+      esbuild \
+      fonts-font-awesome \
+      proxmox-wasm-builder \
+      rust-grass
 
-  # Build without Debian dependency checks
-  dpkg-buildpackage -A -d -us -uc
-  
-  #${SUDO} apt -y build-dep ${BUILD_PROFILES} .
-  #make deb
+    # dh-cargo normally replaces crates.io with debian/cargo_registry.
+    # That breaks here because the needed librust-* packages are not available.
+    # Replace the prepare-debian line with a normal Cargo config.
+    sed -i '/$(CARGO) prepare-debian/c\
+	mkdir -p debian/cargo_home\
+	printf "[net]\\ngit-fetch-with-cli = true\\n" > debian/cargo_home/config.toml' debian/rules
 
-  ls -lh
-  mv -f proxmox-datacenter-manager-ui_${PROXMOX_DM_VER}_all.deb "${PACKAGES}"
-  cd ..
+    # The original rules expect rustflags generated by prepare-debian. Without it,
+    # the grep would fail. Set the wasm linker explicitly instead.
+    sed -i '/grep "\^rustflags = "/c\
+	echo '\''linker = "rust-lld"'\'' >> debian/cargo_home/config.toml' debian/rules
 
+    rm -rf debian/cargo_home debian/cargo_registry
+
+    echo "Relevant debian/rules lines after patching:"
+    grep -n 'prepare-debian\|cargo_home\|cargo_registry\|rust-lld' debian/rules || true
+
+    # Cargo.lock can contain checksums from Debian's local registry. Remove it when switching to crates.io.
+    rm -f Cargo.lock ../Cargo.lock
+
+    CARGO_HOME=/root/.cargo dpkg-buildpackage -A -d -us -uc
+
+    shopt -s nullglob
+    ui_debs=(../proxmox-datacenter-manager-ui_*_all.deb)
+    shopt -u nullglob
+
+    if [ "${#ui_debs[@]}" -eq 0 ]; then
+      echo "Error: no UI .deb was produced" >&2
+      find .. -maxdepth 1 -type f -name 'proxmox-datacenter-manager-ui_*' -ls >&2
+      exit 1
+    fi
+
+    mv -f "${ui_debs[@]}" "${PACKAGES}"
+  )
 fi
 
 cd ..
 
 shopt -s nullglob
 artifacts=(
-  proxmox-datacenter-manager_{,-dbgsym}_${PROXMOX_DM_VER}_${HOST_ARCH}.*
+  proxmox-datacenter-manager{,-dbgsym}_${PROXMOX_DM_VER}_${HOST_ARCH}.*
   proxmox-datacenter-manager-client{,-dbgsym}_${PROXMOX_DM_VER}_${HOST_ARCH}.*
   proxmox-datacenter-manager-docs_${PROXMOX_DM_VER}_all.*
 )

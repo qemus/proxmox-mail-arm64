@@ -367,20 +367,6 @@ if [ ! -d "${PATCHES}" ]; then
 	exit 1
 fi
 
-# Add Proxmox Datacenter Manager repository
-curl -sL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
-     -o /usr/share/keyrings/proxmox-archive-keyring.gpg
-
-cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/pdm-no-subs.sources
-  Types: deb
-  URIs: http://download.proxmox.com/debian/pdm
-  Suites: trixie
-  Components: pdm-no-subscription
-  Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
-DEB
-
-apt update
-
 [ ! -d "${SOURCES}" ] && mkdir -p "${SOURCES}"
 [ ! -d "${PACKAGES_BUILD}" ] && mkdir -p "${PACKAGES_BUILD}"
 
@@ -529,6 +515,19 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 
   cd ui
 
+  # Add Proxmox Datacenter Manager repository
+  curl -sL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
+       -o /usr/share/keyrings/proxmox-archive-keyring.gpg
+
+  cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/pdm-no-subs.sources
+    Types: deb
+    URIs: http://download.proxmox.com/debian/pdm
+    Suites: trixie
+    Components: pdm-no-subscription
+    Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+DEB
+
+  ${SUDO} apt update
   ${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
   dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
 

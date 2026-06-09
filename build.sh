@@ -537,14 +537,13 @@ Components: main
 Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
 DEB
 
-RUN apt update
   ${SUDO} apt update
 
     apt-cache policy \
     librust-gloo-net-0.4+default-dev \
     librust-proxmox-yew-comp-0.8+default-dev \
     proxmox-wasm-builder \
-    rust-grass
+    rust-grass && sleep 20
 	
   ${SUDO} apt -y build-dep ${BUILD_PROFILES} .
   make deb

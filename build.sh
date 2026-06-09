@@ -529,7 +529,7 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
     Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
 DEB
 
-  cat <<'DEB' | sed 's/^[[:space:]]*//' >/ >/etc/apt/sources.list.d/pdm-test.sources
+  cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/pdm-test.sources
     Types: deb
     URIs: http://download.proxmox.com/debian/pdm
     Suites: trixie

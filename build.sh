@@ -515,6 +515,7 @@ dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
 if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 
   cd ui
+  set_package_info
 
 #  # Add Proxmox Datacenter Manager repository
 #  curl -sL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \

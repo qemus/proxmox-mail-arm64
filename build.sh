@@ -537,6 +537,14 @@ Components: main
 Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
 DEB
 
+  cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/debcargo-conf.sources
+Types: deb
+URIs: https://debcargo-team.pages.debian.net/debcargo-conf
+Suites: unstable
+Components: main
+Trusted: yes
+DEB
+
   ${SUDO} apt update
 
     apt-cache policy \

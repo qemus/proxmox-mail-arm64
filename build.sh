@@ -613,6 +613,45 @@ DEB
     # Cargo.lock can contain checksums from Debian's local registry. Remove it when switching to crates.io.
     rm -f Cargo.lock ../Cargo.lock
 
+    # The UI depends on Proxmox crates that are not published on crates.io.
+    # Patch them to the checked-out proxmox.git tree, similar to the server build.
+    if ! grep -q '^\[patch\.crates-io\]' Cargo.toml; then
+      printf '\n[patch.crates-io]\n' >> Cargo.toml
+    fi
+
+    append_ui_patch() {
+      local crate="$1"
+      local path="$2"
+
+      if [ -f "${path}/Cargo.toml" ]; then
+        if ! grep -q "^${crate}[[:space:]]*=" Cargo.toml; then
+          printf '%s = { path = "%s" }\n' "${crate}" "${path}" >> Cargo.toml
+        fi
+      else
+        echo "Warning: local crate ${crate} not found at ${path}" >&2
+      fi
+    }
+
+    append_ui_patch "pbs-api-types" "../../proxmox/pbs-api-types"
+    append_ui_patch "pve-api-types" "../../proxmox/pve-api-types"
+    append_ui_patch "proxmox-acme-api" "../../proxmox/proxmox-acme-api"
+    append_ui_patch "proxmox-apt-api-types" "../../proxmox/proxmox-apt-api-types"
+    append_ui_patch "proxmox-client" "../../proxmox/proxmox-client"
+    append_ui_patch "proxmox-deb-version" "../../proxmox/proxmox-deb-version"
+    append_ui_patch "proxmox-human-byte" "../../proxmox/proxmox-human-byte"
+    append_ui_patch "proxmox-installer-types" "../../proxmox/proxmox-installer-types"
+    append_ui_patch "proxmox-login" "../../proxmox/proxmox-login"
+    append_ui_patch "proxmox-network-api" "../../proxmox/proxmox-network-api"
+    append_ui_patch "proxmox-network-types" "../../proxmox/proxmox-network-types"
+    append_ui_patch "proxmox-rrd-api-types" "../../proxmox/proxmox-rrd-api-types"
+    append_ui_patch "proxmox-schema" "../../proxmox/proxmox-schema"
+    append_ui_patch "proxmox-yew-comp" "../../proxmox/proxmox-yew-comp"
+    append_ui_patch "pwt" "../../proxmox/pwt"
+    append_ui_patch "pwt-macros" "../../proxmox/pwt-macros"
+
+    echo "Relevant UI Cargo.toml patch section:"
+    sed -n '/^\[patch\.crates-io\]/,$p' Cargo.toml
+
     CARGO_HOME=/root/.cargo dpkg-buildpackage -A -d -us -uc
 
     shopt -s nullglob

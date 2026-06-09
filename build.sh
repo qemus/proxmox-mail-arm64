@@ -552,5 +552,5 @@ if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.d
 	cd ..
 	mv -f proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb "${PACKAGES}"
 else
-	echo "pve-xtermjs up-to-date"
+  echo "pve-xtermjs up-to-date"
 fi

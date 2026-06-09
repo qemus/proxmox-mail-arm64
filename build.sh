@@ -546,7 +546,14 @@ Trusted: yes
 DEB
 
   ${SUDO} apt update
-
+  ${SUDO} apt install -y \
+  dh-cargo \
+  cargo \
+  esbuild \
+  fonts-font-awesome \
+  proxmox-wasm-builder \
+  rust-grass
+  
     apt-cache policy \
     librust-gloo-net-0.4+default-dev \
     librust-proxmox-yew-comp-0.8+default-dev \

@@ -49,7 +49,7 @@ function download_package_with_fallback() {
 		fi
 	done
 
-	echo "Error: package ${package} not found in any requested version: $*" >&2
+	echo "Error: package ${package} not found in ${repo} for any requested version: $*" >&2
 	return 1
 }
 
@@ -428,7 +428,11 @@ PROXMOX_DM_VER="${PROXMOX_DM_VER%%-*}"
 PROXMOX_DM_GIT=""
 PROXMOX_GIT=""
 
-if [ -e "${PACKAGES}/proxmox-datacenter-manager_${PROXMOX_DM_VER}_${HOST_ARCH}.deb" ] && { [[ ! "${BUILD_PROFILES}" =~ cross ]] || [ -e "${PACKAGES}/proxmox-datacenter-manager-ui_${PROXMOX_DM_VER}_all.deb" ]; }; then
+if [ -e "${PACKAGES}/proxmox-datacenter-manager_${PROXMOX_DM_VER}_${HOST_ARCH}.deb" ] && \
+   { [[ ! "${BUILD_PROFILES}" =~ cross ]] || { \
+       [ -e "${PACKAGES}/proxmox-datacenter-manager-ui_${PROXMOX_DM_VER}_all.deb" ] && \
+       [ -e "${PACKAGES}/proxmox-datacenter-manager-docs_${PROXMOX_DM_VER}_all.deb" ]; \
+     }; }; then
   echo "proxmox-datacenter-manager up-to-date" && exit 0
 fi
 
@@ -529,24 +533,31 @@ export DEB_VERSION=$(dpkg-parsechangelog -SVersion)
 export DEB_VERSION_UPSTREAM=$(dpkg-parsechangelog -SVersion | cut -d- -f1)
 
 if [[ "${BUILD_PROFILES}" =~ cross ]]; then
-  # For the ARM64 port we build architecture-dependent packages here.
+  echo "Cross build: building only Architecture:any PDM packages"
+  echo "Cross build: downloading Architecture:all PDM packages from the Proxmox repository"
+
+  # -B builds architecture-dependent packages only. This prevents rebuilding docs/UI.
   dpkg-buildpackage -a${HOST_ARCH} -B -us -uc ${BUILD_PROFILES}
 
-  echo "Downloading architecture-independent PDM packages instead of building them"
-  download_package_with_fallback pdm proxmox-datacenter-manager-ui "${PACKAGES}"     "${DEB_VERSION}" "${DEB_VERSION_UPSTREAM}" "${PROXMOX_DM_VER}" >/dev/null
-  download_package_with_fallback pdm proxmox-datacenter-manager-docs "${PACKAGES}"     "${DEB_VERSION}" "${DEB_VERSION_UPSTREAM}" "${PROXMOX_DM_VER}" >/dev/null
+  download_package_with_fallback pdm proxmox-datacenter-manager-ui "${PACKAGES}" \
+    "${DEB_VERSION}" "${DEB_VERSION_UPSTREAM}" "${PROXMOX_DM_VER}" >/dev/null
+
+  download_package_with_fallback pdm proxmox-datacenter-manager-docs "${PACKAGES}" \
+    "${DEB_VERSION}" "${DEB_VERSION_UPSTREAM}" "${PROXMOX_DM_VER}" >/dev/null
 else
   dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
 fi
-
 cd ..
 
 shopt -s nullglob
 artifacts=(
   proxmox-datacenter-manager{,-dbgsym}_${PROXMOX_DM_VER}_${HOST_ARCH}.*
   proxmox-datacenter-manager-client{,-dbgsym}_${PROXMOX_DM_VER}_${HOST_ARCH}.*
-  proxmox-datacenter-manager-docs_${PROXMOX_DM_VER}_all.*
 )
+
+if [[ ! "${BUILD_PROFILES}" =~ cross ]]; then
+  artifacts+=(proxmox-datacenter-manager-docs_${PROXMOX_DM_VER}_all.*)
+fi
 shopt -u nullglob
 
 if [ "${#artifacts[@]}" -eq 0 ]; then
@@ -562,9 +573,20 @@ PVE_XTERMJS_GIT="1209ea0d5bda89fec71484d09f784bd3b94fafaf"
 PROXMOX_XTERMJS_GIT="deb32a6c4a21bea0d72059de0835fde504296bf0"
 PROXMOX_TERMPROXY_VER="2.1.0"
 
-# pve-xtermjs is Architecture: all, so download it instead of building it.
+# pve-xtermjs is Architecture: all, so do not build it during cross builds.
 if [ ! -e "${PACKAGES}/pve-xtermjs_${PVE_XTERMJS_VER}_all.deb" ]; then
-	download_package_with_fallback devel pve-xtermjs "${PACKAGES}" "${PVE_XTERMJS_VER}" >/dev/null
+	if [[ "${BUILD_PROFILES}" =~ cross ]]; then
+		echo "Downloading pve-xtermjs Architecture:all package"
+		download_package_with_fallback devel pve-xtermjs "${PACKAGES}" "${PVE_XTERMJS_VER}" >/dev/null
+	else
+		git_clone_or_fetch https://git.proxmox.com/git/pve-xtermjs.git
+		git_clean_and_checkout ${PVE_XTERMJS_GIT} pve-xtermjs
+		patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-arm.patch"
+		cd pve-xtermjs/xterm.js
+		make deb
+		mv -f pve-xtermjs_${PVE_XTERMJS_VER}_all.deb "${PACKAGES}"
+		cd ../..
+	fi
 else
 	echo "pve-xtermjs up-to-date"
 fi
@@ -584,7 +606,7 @@ if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.d
 	${SUDO} apt -y -a${HOST_ARCH} build-dep .
 	BUILD_MODE=release make deb
 	cd ../..
-	mv -f proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb "${PACKAGES}"
+	mv -f pve-xtermjs/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb "${PACKAGES}"
 else
 	echo "proxmox-termproxy up-to-date"
 fi

@@ -517,11 +517,22 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
   cd ui
   set_package_info
 
-sed -i '/^Build-Depends:/,/^[^ ]/ {
+  # Get missing stylesheet assets
+  git clone --depth=1 https://git.proxmox.com/git/proxmox-yew-widget-toolkit.git pwt-assets
+
+  # Stop Debian cargo wrapper from replacing crates.io with debian/cargo_registry
+  rm -rf debian/cargo_home debian/cargo_registry
+  mkdir -p debian/cargo_home
+  cat >debian/cargo_home/config.toml <<'EOF'
+[net]
+git-fetch-with-cli = true
+EOF
+
+  sed -i '/^Build-Depends:/,/^[^ ]/ {
   /librust-/d
 }' debian/control
 
-sed -i '/^Package: proxmox-datacenter-manager-ui/,/^$/ s/^Architecture: any$/Architecture: all/' \
+  sed -i '/^Package: proxmox-datacenter-manager-ui/,/^$/ s/^Architecture: any$/Architecture: all/' \
   debian/control
 
   # Add Proxmox Datacenter Manager repository
@@ -553,8 +564,9 @@ DEB
   proxmox-wasm-builder \
   rust-grass
 
+  # Build without Debian dependency checks
   dpkg-buildpackage -A -d -us -uc
-
+  
   #${SUDO} apt -y build-dep ${BUILD_PROFILES} .
   #make deb
 

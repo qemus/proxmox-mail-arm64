@@ -530,19 +530,11 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 DEB
 
    cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/proxmox-devel.sources
-Types: deb
-URIs: http://download.proxmox.com/debian/devel
-Suites: trixie
-Components: main
-Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
-DEB
-
-  cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/debcargo-conf.sources
-Types: deb
-URIs: https://debcargo-team.pages.debian.net/debcargo-conf
-Suites: unstable
-Components: main
-Trusted: yes
+     Types: deb
+     URIs: http://download.proxmox.com/debian/devel
+     Suites: trixie
+     Components: main
+     Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
 DEB
 
   ${SUDO} apt update

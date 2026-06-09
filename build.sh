@@ -367,8 +367,22 @@ if [ ! -d "${PATCHES}" ]; then
 	exit 1
 fi
 
-[ ! -d "${PACKAGES_BUILD}" ] && mkdir -p "${PACKAGES_BUILD}"
+# Add Proxmox Datacenter Manager repository
+curl -sL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
+     -o /usr/share/keyrings/proxmox-archive-keyring.gpg
+
+cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/pdm-no-subs.sources
+  Types: deb
+  URIs: http://download.proxmox.com/debian/pdm
+  Suites: trixie
+  Components: pdm-no-subscription
+  Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+DEB
+
+apt update
+
 [ ! -d "${SOURCES}" ] && mkdir -p "${SOURCES}"
+[ ! -d "${PACKAGES_BUILD}" ] && mkdir -p "${PACKAGES_BUILD}"
 
 echo "Download packages list from proxmox devel repository"
 PACKAGES_DEVEL=$(load_packages http://download.proxmox.com/debian/devel/dists/trixie/main/binary-amd64/Packages.gz)

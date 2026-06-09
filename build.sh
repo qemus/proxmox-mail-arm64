@@ -533,8 +533,6 @@ export DEB_VERSION=$(dpkg-parsechangelog -SVersion)
 export DEB_VERSION_UPSTREAM=$(dpkg-parsechangelog -SVersion | cut -d- -f1)
 
 if [[ "${BUILD_PROFILES}" =~ cross ]]; then
-  echo "Cross build: building only Architecture:any PDM packages"
-  echo "Cross build: downloading Architecture:all PDM packages from the Proxmox repository"
 
   # -B builds architecture-dependent packages only. This prevents rebuilding docs/UI.
   dpkg-buildpackage -a${HOST_ARCH} -B -us -uc ${BUILD_PROFILES}
@@ -547,16 +545,14 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 else
   dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
 fi
+
 cd ..
 
 shopt -s nullglob
 artifacts=(
   proxmox-datacenter-manager{,-dbgsym}_${PROXMOX_DM_VER}_${HOST_ARCH}.*
   proxmox-datacenter-manager-client{,-dbgsym}_${PROXMOX_DM_VER}_${HOST_ARCH}.*
-)
-
-if [[ ! "${BUILD_PROFILES}" =~ cross ]]; then
-  artifacts+=(proxmox-datacenter-manager-docs_${PROXMOX_DM_VER}_all.*)
+  proxmox-datacenter-manager-docs_${PROXMOX_DM_VER}_all.*
 fi
 shopt -u nullglob
 

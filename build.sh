@@ -238,14 +238,17 @@ function download_release() {
 	fi
 
 	for download_url in "${download_urls[@]}"; do
-		file=$(basename "${download_url}")
 
+		file=$(basename "${download_url}")
+		
 		if [ -e "${PACKAGES}/${file}" ]; then
 			echo "${file} already exists"
 		else
 			echo "Downloading ${file}"
 			curl -sSfL "${download_url}" -o "${PACKAGES}/${file}"
 		fi
+
+        [[ "$file" == "proxmox-datacenter-manager-client"* ]] && continue
 
 		file_list+=("${PACKAGES}/${file}")
 	done

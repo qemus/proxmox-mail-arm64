@@ -517,6 +517,13 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
   cd ui
   set_package_info
 
+sed -i '/^Build-Depends:/,/^[^ ]/ {
+  /librust-/d
+}' debian/control
+
+sed -i '/^Package: proxmox-datacenter-manager-ui/,/^$/ s/^Architecture: any$/Architecture: all/' \
+  debian/control
+
   # Add Proxmox Datacenter Manager repository
   curl -sL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
        -o /usr/share/keyrings/proxmox-archive-keyring.gpg
@@ -545,15 +552,11 @@ DEB
   fonts-font-awesome \
   proxmox-wasm-builder \
   rust-grass
-  
-    apt-cache policy \
-    librust-gloo-net-0.4+default-dev \
-    librust-proxmox-yew-comp-0.8+default-dev \
-    proxmox-wasm-builder \
-    rust-grass && sleep 20
-	
-  ${SUDO} apt -y build-dep ${BUILD_PROFILES} .
-  make deb
+
+  dpkg-buildpackage -A -d -us -uc
+
+  #${SUDO} apt -y build-dep ${BUILD_PROFILES} .
+  #make deb
 
   ls -lh
   mv -f proxmox-datacenter-manager-ui_${PROXMOX_DM_VER}_all.deb "${PACKAGES}"

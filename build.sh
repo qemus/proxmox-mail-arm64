@@ -494,8 +494,7 @@ set_package_info
 
 if [ "${PACKAGE_ARCH}" != "${HOST_ARCH}" ]; then
   export DEB_BUILD_MAINT_OPTIONS="hardening=+all,-branch"
-  export OBJCOPY="${HOST_CPU}-linux-gnu-objcopy"
-  export STRIP="${HOST_CPU}-linux-gnu-strip"
+  export DEB_BUILD_OPTIONS="${DEB_BUILD_OPTIONS:+${DEB_BUILD_OPTIONS} }nostrip"
 fi
 
 ${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .

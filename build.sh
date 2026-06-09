@@ -521,23 +521,22 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
   curl -sL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
        -o /usr/share/keyrings/proxmox-archive-keyring.gpg
 
-  cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/pdm-no-subs.sources
+  cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/pdm.sources
     Types: deb
     URIs: http://download.proxmox.com/debian/pdm
     Suites: trixie
-    Components: pdm-no-subscription
-    Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
-DEB
-
-  cat <<'DEB' | sed 's/^[[:space:]]*//' >/etc/apt/sources.list.d/pdm-test.sources
-    Types: deb
-    URIs: http://download.proxmox.com/debian/pdm
-    Suites: trixie
-    Components: pdm-test
+    Components: pdm-no-subscription pdm-test
     Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
 DEB
 
   ${SUDO} apt update
+
+    apt-cache policy \
+    librust-gloo-net-0.4+default-dev \
+    librust-proxmox-yew-comp-0.8+default-dev \
+    proxmox-wasm-builder \
+    rust-grass
+	
   ${SUDO} apt -y build-dep ${BUILD_PROFILES} .
   make deb
 

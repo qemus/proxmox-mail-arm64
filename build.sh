@@ -538,18 +538,20 @@ rm -rf debian/cargo_registry debian/cargo_home
   sed -i '/^Package: proxmox-datacenter-manager-ui/,/^$/ s/^Architecture: any$/Architecture: all/' \
   debian/control
 
-  # Fix missing pwt-assets
-  rm -rf pwt-assets
+# Fix missing pwt-assets
+PWT_SCSS="$(find "${SOURCES}" -path '*/pwt-assets/scss/crisp-yew-style.scss' -print -quit)"
 
-if [ -d "../proxmox-widget-toolkit/pwt-assets" ]; then
-  ln -s "../proxmox-widget-toolkit/pwt-assets" pwt-assets
-elif [ -d "../../proxmox/proxmox-yew-widget-toolkit/pwt-assets" ]; then
-  ln -s "../../proxmox/proxmox-yew-widget-toolkit/pwt-assets" pwt-assets
-else
-  find "${SOURCES}" -path '*/pwt-assets/scss/crisp-yew-style.scss' -print
+if [ -z "$PWT_SCSS" ]; then
+  echo "Error: could not find pwt-assets/scss/crisp-yew-style.scss" >&2
+  echo "Available matching files:" >&2
+  find "${SOURCES}" -iname '*yew-style*' -o -iname '*crisp*' -o -iname '*pwt*' >&2
   exit 1
 fi
 
+PWT_ASSETS="$(dirname "$(dirname "$PWT_SCSS")")"
+
+rm -rf pwt-assets
+ln -s "$PWT_ASSETS" pwt-assets
 ls -l pwt-assets/scss/crisp-yew-style.scss
 
   # Add Proxmox Datacenter Manager repository

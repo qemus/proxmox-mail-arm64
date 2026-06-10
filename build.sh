@@ -792,6 +792,12 @@ export DEB_HOST_RUST_TYPE=${HOST_CPU}-unknown-${HOST_SYSTEM}
 
 while [ "$#" -ge 1 ]; do
 	case "$1" in
+    client)
+	    BUILD_PACKAGE="client"
+		BUILD_PROFILES=${BUILD_PROFILES}",nodoc"
+ 		[[ ${BUILD_PROFILES} =~ nocheck ]] || BUILD_PROFILES=${BUILD_PROFILES}",nocheck"
+ 		export DEB_BUILD_OPTIONS="nocheck"
+		;;
 	cross*)
 		if [[ "$1" =~ cross=[0-9.-]+ ]]; then
 			PROXMOX_DM_VER="${1#cross=}"
@@ -855,7 +861,7 @@ while [ "$#" -ge 1 ]; do
 		set -x
 		;;
 	*)
-		echo "usage $0 [cross] [nocheck] [debug] [download] [install]"
+		echo "usage $0 [client] [cross] [nocheck] [debug] [download] [install]"
 		exit 1
 		;;
 	esac
@@ -1048,6 +1054,8 @@ pdm_runtime_debs=(
   "${PACKAGES}/proxmox-datacenter-manager-client_${PROXMOX_DM_VER}_${HOST_ARCH}.deb"
 )
 download_runtime_arch_all_dependencies "${pdm_runtime_debs[@]}"
+
+[ "${BUILD_PACKAGE}" = "client" ] && exit 0
 
 PVE_XTERMJS_VER="$(latest_package_version pve pve-xtermjs)"
 

@@ -126,6 +126,62 @@ function download_package_with_fallback() {
 	return 1
 }
 
+
+function download_package_prefix_no_deps() {
+	repo=${1}
+	package_name=${2}
+	upstream_version=${3}
+	dest=${4}
+
+	url_base=http://download.proxmox.com/debian/${repo}
+	if [[ "${repo}" == "pdm" ]]; then
+		packages_target=${PACKAGES_PDM}
+	elif [[ "${repo}" == "devel" ]]; then
+		packages_target=${PACKAGES_DEVEL}
+	else
+		echo "Unknown repo ${repo}" >&2
+		return 1
+	fi
+
+	version_target=""
+	file_target=""
+
+	while IFS=';' read -r name version file depends; do
+		[[ "${name}" == "${package_name}" ]] || continue
+
+		case "${version}" in
+			"${upstream_version}"|"${upstream_version}"-*|"${upstream_version}"+*|"${upstream_version}"~*) ;;
+			*) continue ;;
+		esac
+
+		if [ -z "${version_target}" ] || dpkg --compare-versions "${version}" '>>' "${version_target}"; then
+			version_target=${version}
+			file_target=${file}
+		fi
+	done <<<"${packages_target}"
+
+	if [ -z "${file_target}" ]; then
+		echo "Error: package ${package_name} not found in ${repo} for upstream version ${upstream_version}" >&2
+		echo "Available ${package_name} versions in ${repo}:" >&2
+		while IFS=';' read -r name version file depends; do
+			[[ "${name}" == "${package_name}" ]] && echo "  ${version}" >&2
+		done <<<"${packages_target}"
+		return 1
+	fi
+
+	url=${url_base}/${file_target}
+	file="${dest}/${url##*/}"
+	if [ -e "${file}" ]; then
+		echo "${package_name} ${version_target} up-to-date" >&2
+		echo "${file}"
+		return 0
+	fi
+
+	echo "${package_name} ${version_target} downloading...${url}" >&2
+	curl -sSfL "${url}" -o "${file}"
+	echo "${file}"
+}
+
 function git_clone_or_fetch() {
 	url=${1}              # url/name.git
 	name_git=${url##*/}   # name.git
@@ -464,8 +520,11 @@ fi
 
 echo "Download packages list from proxmox devel repository"
 PACKAGES_DEVEL=$(load_packages http://download.proxmox.com/debian/devel/dists/trixie/main/binary-amd64/Packages.gz)
-echo "Download packages list from pdm-test repository"
-PACKAGES_PDM=$(load_packages http://download.proxmox.com/debian/pdm/dists/trixie/pdm-test/binary-amd64/Packages.gz)
+echo "Download packages list from pdm repositories"
+PACKAGES_PDM="$(
+	load_packages http://download.proxmox.com/debian/pdm/dists/trixie/pdm-test/binary-amd64/Packages.gz
+	load_packages http://download.proxmox.com/debian/pdm/dists/trixie/pdm-no-subscription/binary-amd64/Packages.gz
+)"
 
 echo "Download dependencies"
 EXTJS_VER=(">=" "7~")
@@ -605,9 +664,9 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
   echo "Cross build: building only Architecture:any PDM packages"
   dpkg-buildpackage -a${HOST_ARCH} -B -us -uc ${BUILD_PROFILES}
 
-  echo "Cross build: downloading Architecture:all PDM packages"
-  download_package_with_fallback pdm proxmox-datacenter-manager-ui "${PACKAGES}" "${DEB_VERSION}" "${DEB_VERSION_UPSTREAM}" "${PROXMOX_DM_VER}" >/dev/null
-  download_package_with_fallback pdm proxmox-datacenter-manager-docs "${PACKAGES}" "${DEB_VERSION}" "${DEB_VERSION_UPSTREAM}" "${PROXMOX_DM_VER}" >/dev/null
+  echo "Cross build: downloading Architecture:all PDM packages (prefix matcher v4)"
+  download_package_prefix_no_deps pdm proxmox-datacenter-manager-ui "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
+  download_package_prefix_no_deps pdm proxmox-datacenter-manager-docs "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
 else
   dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
 fi
@@ -640,7 +699,7 @@ if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.d
    [ ! -e "${PACKAGES}/pve-xtermjs_${PVE_XTERMJS_VER}_all.deb" ]; then
 	if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 		echo "Cross build: downloading Architecture:all pve-xtermjs package"
-		download_package_with_fallback devel pve-xtermjs "${PACKAGES}" "${PVE_XTERMJS_VER}" >/dev/null
+		download_package_prefix_no_deps devel pve-xtermjs "${PVE_XTERMJS_VER}" "${PACKAGES}" >/dev/null
 	else
 		git_clone_or_fetch https://git.proxmox.com/git/pve-xtermjs.git
 		git_clean_and_checkout ${PVE_XTERMJS_GIT} pve-xtermjs
@@ -689,4 +748,6 @@ else
 	echo "proxmox-mini-journalreader up-to-date"
 fi
 
-rm -f "${PACKAGES}"/*-dbgsym_*.deb
+# Remove debug symbol packages from output directory.
+echo "Removing debug symbol packages from ${PACKAGES}"
+rm -f "${PACKAGES}"/*-dbgsym_*.deb "${PACKAGES}"/*.ddeb

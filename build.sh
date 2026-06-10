@@ -768,7 +768,7 @@ if [ "${BUILD_PACKAGE}" = "server" ]; then
 	# repository metadata, instead of pinning minimum versions in this script.
 	download_package_latest pdm pdm-i18n "${PACKAGES}" >/dev/null || true
 	libjs_extjs="$(download_package_latest pdm libjs-extjs "${PACKAGES}")"
-	libjs-qrcodejs="$(download_package_latest pbs libjs-qrcodejs "${PACKAGES}")"
+	libjs-qrcodejs="$(download_package_latest pdm libjs-qrcodejs "${PACKAGES}")"
 	proxmox_widget_toolkit="$(download_package_latest pdm proxmox-widget-toolkit "${PACKAGES}")"
 	download_package_latest pdm libproxmox-acme-plugins "${PACKAGES}" >/dev/null || true
 

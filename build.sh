@@ -67,8 +67,7 @@ function download_package_by_upstream_version() {
 			line=${line##*${file};}
 			depends=${line}
 
-			# Match Debian revisions and binNMUs for the requested upstream version,
-			# for example 1.1.4, 1.1.4-1, 1.1.4-1+b1 or 1.1.4~rc1.
+			# Match Debian revisions and binNMUs for the requested upstream version
 			case "${version}" in
 				"${upstream_version}"|"${upstream_version}"-*|"${upstream_version}"+*|"${upstream_version}"~*) ;;
 				*) continue ;;

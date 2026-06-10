@@ -30,11 +30,11 @@ RUN grep -qi ubuntu /etc/os-release && \
 RUN dpkg --add-architecture arm64
 RUN apt update && apt-get install -y --no-install-recommends \
 	build-essential crossbuild-essential-arm64 curl ca-certificates sudo git lintian \
-	pkg-config libudev-dev:arm64 libssl-dev:arm64 libapt-pkg-dev:arm64 apt:amd64 \
+	pkg-config libudev-dev:arm64 libssl-dev:arm64 libapt-pkg-dev:arm64 \
 	libclang-dev libpam0g-dev:arm64 pkgconf:arm64 zlib1g-dev:arm64 nettle-dev:arm64 \
 	libcrypt-dev:arm64 libacl1-dev:arm64 libsystemd-dev:arm64 \
 	libfuse3-dev:arm64 libldap2-dev:arm64 libzstd-dev:arm64 \
-	jq rsync qemu-user qemu-user-binfmt patchelf apt:amd64
+	jq rsync qemu-user qemu-user-binfmt patchelf
 RUN grep -qi trixie /etc/os-release && apt-get install -y pkg-config:arm64 || true
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -sSf | sh -s -- -y
@@ -43,8 +43,9 @@ RUN source ~/.cargo/env && rustup target add aarch64-unknown-linux-gnu
 COPY . /build/
 WORKDIR /build
 
-RUN df -h
+RUN chmod +x ./build.sh
 RUN source ~/.cargo/env && ./build.sh ${buildoptions}
+RUN touch /build/build.log
 
 FROM scratch
 COPY --from=builder-stage /build/*.log /build/packages/* /

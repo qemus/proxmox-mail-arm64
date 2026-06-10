@@ -35,6 +35,220 @@ function download_package() {
 	echo "${file}"
 }
 
+function download_package_by_upstream_version() {
+	repo=${1}
+	package_name=${2}
+	upstream_version=${3}
+	dest=${4}
+
+	url_base=http://download.proxmox.com/debian/${repo}
+	if [[ "${repo}" == "pdm" ]]; then
+		packages_target=${PACKAGES_PDM}
+	elif [[ "${repo}" == "devel" ]]; then
+		packages_target=${PACKAGES_DEVEL}
+	else
+		echo "Unknown repo ${repo}" >&2
+		return 1
+	fi
+
+	version_target=0.0
+	file_target=
+
+	while IFS= read -r line; do
+		name=${line%%;*}
+		line=${line##*${name};}
+
+		if [[ "${name}" == "${package_name}" ]]; then
+			version=${line%%;*}
+			line=${line##*${version};}
+			file=${line%%;*}
+			line=${line##*${file};}
+			depends=${line}
+
+			# Match Debian revisions and binNMUs for the requested upstream version,
+			# for example 1.1.4, 1.1.4-1, 1.1.4-1+b1 or 1.1.4~rc1.
+			case "${version}" in
+				"${upstream_version}"|"${upstream_version}"-*|"${upstream_version}"+*|"${upstream_version}"~*) ;;
+				*) continue ;;
+			esac
+
+			if dpkg --compare-versions "${version}" '>>' "${version_target}"; then
+				if [ -n "${depends}" ]; then
+					${SUDO} apt satisfy -s "${depends}" >/dev/null 2>&1 || continue
+				fi
+				version_target=${version}
+				file_target=${file}
+			fi
+		fi
+	done <<<"${packages_target}"
+
+	if [ -z "${file_target}" ]; then
+		return 1
+	fi
+
+	url=${url_base}/${file_target}
+	file="${dest}/${url##*/}"
+	if [ -e "${file}" ]; then
+		echo "${package_name} ${version_target} up-to-date" >&2
+		echo "${file}"
+		return 0
+	fi
+
+	echo "${package_name} ${version_target} downloading...${url}" >&2
+	curl -sSfL "${url}" -o "${file}"
+	echo "${file}"
+}
+
+function download_package_with_fallback() {
+	repo=${1}
+	package=${2}
+	dest=${3}
+	shift 3
+
+	for version in "$@"; do
+		[ -n "${version}" ] || continue
+
+		# First try an exact Debian package version.
+		if file=$(download_package "${repo}" "${package}" "${version}" "${dest}" 2>/dev/null); then
+			echo "${file}"
+			return 0
+		fi
+
+		# Then try the same value as an upstream version and accept Debian revisions
+		# such as 1.1.4-1.
+		if file=$(download_package_by_upstream_version "${repo}" "${package}" "${version}" "${dest}" 2>/dev/null); then
+			echo "${file}"
+			return 0
+		fi
+	done
+
+	echo "Error: package ${package} not found in ${repo} for any requested version: $*" >&2
+	return 1
+}
+
+
+function download_package_prefix_no_deps() {
+	repo=${1}
+	package_name=${2}
+	upstream_version=${3}
+	dest=${4}
+
+	url_base=http://download.proxmox.com/debian/${repo}
+	if [[ "${repo}" == "pdm" ]]; then
+		packages_target=${PACKAGES_PDM}
+	elif [[ "${repo}" == "devel" ]]; then
+		packages_target=${PACKAGES_DEVEL}
+	else
+		echo "Unknown repo ${repo}" >&2
+		return 1
+	fi
+
+	version_target=""
+	file_target=""
+
+	while IFS=';' read -r name version file depends; do
+		[[ "${name}" == "${package_name}" ]] || continue
+
+		case "${version}" in
+			"${upstream_version}"|"${upstream_version}"-*|"${upstream_version}"+*|"${upstream_version}"~*) ;;
+			*) continue ;;
+		esac
+
+		if [ -z "${version_target}" ] || dpkg --compare-versions "${version}" '>>' "${version_target}"; then
+			version_target=${version}
+			file_target=${file}
+		fi
+	done <<<"${packages_target}"
+
+	if [ -z "${file_target}" ]; then
+		echo "Error: package ${package_name} not found in ${repo} for upstream version ${upstream_version}" >&2
+		echo "Available ${package_name} versions in ${repo}:" >&2
+		while IFS=';' read -r name version file depends; do
+			[[ "${name}" == "${package_name}" ]] && echo "  ${version}" >&2
+		done <<<"${packages_target}"
+		return 1
+	fi
+
+	url=${url_base}/${file_target}
+	file="${dest}/${url##*/}"
+	if [ -e "${file}" ]; then
+		echo "${package_name} ${version_target} up-to-date" >&2
+		echo "${file}"
+		return 0
+	fi
+
+	echo "${package_name} ${version_target} downloading...${url}" >&2
+	curl -sSfL "${url}" -o "${file}"
+	echo "${file}"
+}
+
+
+function download_package_max_upstream_no_deps() {
+	repo=${1}
+	package_name=${2}
+	max_upstream_version=${3}
+	dest=${4}
+
+	url_base=http://download.proxmox.com/debian/${repo}
+	if [[ "${repo}" == "pdm" ]]; then
+		packages_target=${PACKAGES_PDM}
+	elif [[ "${repo}" == "devel" ]]; then
+		packages_target=${PACKAGES_DEVEL}
+	else
+		echo "Unknown repo ${repo}" >&2
+		return 1
+	fi
+
+	version_target=""
+	file_target=""
+	upstream_target=""
+
+	while IFS=';' read -r name version file depends; do
+		[[ "${name}" == "${package_name}" ]] || continue
+		[ -n "${version}" ] || continue
+
+		# Compare by upstream part, so a repository version like 1.1.2 is accepted
+		# when the requested source version is 1.1.4, but 1.1.5 is not.
+		upstream=${version%%-*}
+		if ! dpkg --compare-versions "${upstream}" le "${max_upstream_version}"; then
+			continue
+		fi
+
+		if [ -z "${version_target}" ] || dpkg --compare-versions "${version}" '>>' "${version_target}"; then
+			version_target=${version}
+			upstream_target=${upstream}
+			file_target=${file}
+		fi
+	done <<<"${packages_target}"
+
+	if [ -z "${file_target}" ]; then
+		echo "Error: package ${package_name} not found in ${repo} with upstream <= ${max_upstream_version}" >&2
+		echo "Available ${package_name} versions in ${repo}:" >&2
+		while IFS=';' read -r name version file depends; do
+			[[ "${name}" == "${package_name}" ]] && echo "  ${version}" >&2
+		done <<<"${packages_target}"
+		return 1
+	fi
+
+	if [ "${upstream_target}" != "${max_upstream_version}" ]; then
+		echo "Warning: using ${package_name} ${version_target}; requested source upstream is ${max_upstream_version}" >&2
+	else
+		echo "Using ${package_name} ${version_target}" >&2
+	fi
+
+	url=${url_base}/${file_target}
+	file="${dest}/${url##*/}"
+	if [ -e "${file}" ]; then
+		echo "${package_name} ${version_target} up-to-date" >&2
+		echo "${file}"
+		return 0
+	fi
+
+	echo "${package_name} ${version_target} downloading...${url}" >&2
+	curl -sSfL "${url}" -o "${file}"
+	echo "${file}"
+}
+
 function git_clone_or_fetch() {
 	url=${1}              # url/name.git
 	name_git=${url##*/}   # name.git
@@ -248,6 +462,7 @@ function download_release() {
 			curl -sSfL "${download_url}" -o "${PACKAGES}/${file}"
 		fi
 
+        [[ "$file" == *"dbgsym"* ]] && continue
         [[ "$file" == "proxmox-datacenter-manager-client"* ]] && continue
 
 		file_list+=("${PACKAGES}/${file}")
@@ -304,7 +519,7 @@ while [ "$#" -ge 1 ]; do
 		${SUDO} apt install -y crossbuild-essential-arm64 pkgconf:arm64 libssl-dev:arm64 nettle-dev:arm64 libudev-dev:arm64 \
 		                       libcrypt-dev:arm64 libsystemd-dev:arm64 libacl1-dev:arm64 uuid-dev:arm64 libfuse3-dev:arm64 \
 							   libldap2-dev:arm64 libzstd-dev:arm64 libpam0g-dev:arm64 zlib1g-dev:arm64 libapt-pkg-dev:arm64 \
-						       jq rsync qemu-user qemu-user-binfmt apt:amd64 patchelf binutils-aarch64-linux-gnu
+						       jq rsync qemu-user qemu-user-binfmt patchelf binutils-aarch64-linux-gnu
 
 		export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=/usr/bin/aarch64-linux-gnu-gcc
 		export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER=qemu-aarch64
@@ -367,19 +582,24 @@ if [ ! -d "${PATCHES}" ]; then
 	exit 1
 fi
 
-[ ! -d "${PACKAGES_BUILD}" ] && mkdir -p "${PACKAGES_BUILD}"
 [ ! -d "${SOURCES}" ] && mkdir -p "${SOURCES}"
+[ ! -d "${PACKAGES_BUILD}" ] && mkdir -p "${PACKAGES_BUILD}"
 
 echo "Download packages list from proxmox devel repository"
 PACKAGES_DEVEL=$(load_packages http://download.proxmox.com/debian/devel/dists/trixie/main/binary-amd64/Packages.gz)
-echo "Download packages list from pdm-test repository"
-PACKAGES_PDM=$(load_packages http://download.proxmox.com/debian/pdm/dists/trixie/pdm-test/binary-amd64/Packages.gz)
+echo "Download packages list from pdm repositories"
+PACKAGES_PDM="$(
+	load_packages http://download.proxmox.com/debian/pdm/dists/trixie/pdm-test/binary-amd64/Packages.gz
+	load_packages http://download.proxmox.com/debian/pdm/dists/trixie/pdm-no-subscription/binary-amd64/Packages.gz
+)"
 
 echo "Download dependencies"
 EXTJS_VER=(">=" "7~")
+PDM_I18N_VER=(">=" "3.6.0")
 PROXMOX_ACME_VER=(">=" "1.7.0")
 PROXMOX_WIDGETTOOLKIT_VER=(">=" "5.0.2")
 if [ "${BUILD_PACKAGE}" = "server" ]; then
+    download_package pdm pdm-i18n "${PDM_I18N_VER[@]}" "${PACKAGES}" >/dev/null
 	libjs_extjs="$(download_package pdm libjs-extjs "${EXTJS_VER[@]}" "${PACKAGES}")"
 	proxmox_widget_toolkit="$(download_package pdm proxmox-widget-toolkit "${PROXMOX_WIDGETTOOLKIT_VER[@]}" "${PACKAGES}")"
 	download_package pdm libproxmox-acme-plugins "${PROXMOX_ACME_VER[@]}" "${PACKAGES}" >/dev/null
@@ -407,7 +627,7 @@ PROXMOX_DM_VER="${PROXMOX_DM_VER%%-*}"
 PROXMOX_DM_GIT=""
 PROXMOX_GIT=""
 
-if [ -e "${PACKAGES}/proxmox-datacenter-manager-${BUILD_PACKAGE}_${PROXMOX_DM_VER}_${PACKAGE_ARCH}.deb" ]; then
+if [ -e "${PACKAGES}/proxmox-datacenter-manager_${PROXMOX_DM_VER}_${HOST_ARCH}.deb" ] && { [[ ! "${BUILD_PROFILES}" =~ cross ]] || [ -e "${PACKAGES}/proxmox-datacenter-manager-ui_${PROXMOX_DM_VER}_all.deb" ]; }; then
   echo "proxmox-datacenter-manager up-to-date" && exit 0
 fi
 
@@ -507,15 +727,26 @@ ${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
 export DEB_VERSION=$(dpkg-parsechangelog -SVersion)
 export DEB_VERSION_UPSTREAM=$(dpkg-parsechangelog -SVersion | cut -d- -f1)
 
-dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
+if [[ "${BUILD_PROFILES}" =~ cross ]]; then
+  echo "Cross build: building only Architecture:any PDM packages"
+  dpkg-buildpackage -a${HOST_ARCH} -B -us -uc ${BUILD_PROFILES}
+
+  echo "Cross build: downloading Architecture:all PDM packages (latest available <= requested)"
+  download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-ui "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
+  download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-docs "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
+else
+  dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
+fi
 cd ..
 
 shopt -s nullglob
 artifacts=(
   proxmox-datacenter-manager{,-dbgsym}_${PROXMOX_DM_VER}_${HOST_ARCH}.*
   proxmox-datacenter-manager-client{,-dbgsym}_${PROXMOX_DM_VER}_${HOST_ARCH}.*
-  proxmox-datacenter-manager-docs_${PROXMOX_DM_VER}_all.*
 )
+if [[ ! "${BUILD_PROFILES}" =~ cross ]]; then
+  artifacts+=(proxmox-datacenter-manager-docs_${PROXMOX_DM_VER}_all.*)
+fi
 shopt -u nullglob
 
 if [ "${#artifacts[@]}" -eq 0 ]; then
@@ -533,24 +764,56 @@ PROXMOX_TERMPROXY_VER="2.1.0"
 
 if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb" ] ||
    [ ! -e "${PACKAGES}/pve-xtermjs_${PVE_XTERMJS_VER}_all.deb" ]; then
-	git_clone_or_fetch https://git.proxmox.com/git/pve-xtermjs.git
-	git_clean_and_checkout ${PVE_XTERMJS_GIT} pve-xtermjs
-	patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-arm.patch"
-	[[ "${BUILD_PROFILES}" =~ cross ]] &&
-		patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-cross.patch"
-	cd pve-xtermjs/
-	git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
-	git_clean_and_checkout ${PROXMOX_XTERMJS_GIT} proxmox
-	cd termproxy
-	set_package_info
-	${SUDO} apt -y -a${HOST_ARCH} build-dep .
-	BUILD_MODE=release make deb
-	cd ..
-	cd xterm.js
-	make deb
-	mv -f pve-xtermjs_${PVE_XTERMJS_VER}_all.deb "${PACKAGES}"
-	cd ..
-	mv -f proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb "${PACKAGES}"
+	if [[ "${BUILD_PROFILES}" =~ cross ]]; then
+		echo "Cross build: downloading Architecture:all pve-xtermjs package"
+		download_package_prefix_no_deps devel pve-xtermjs "${PVE_XTERMJS_VER}" "${PACKAGES}" >/dev/null
+	else
+		git_clone_or_fetch https://git.proxmox.com/git/pve-xtermjs.git
+		git_clean_and_checkout ${PVE_XTERMJS_GIT} pve-xtermjs
+		patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-arm.patch"
+		cd pve-xtermjs/
+		cd xterm.js
+		make deb
+		mv -f pve-xtermjs_${PVE_XTERMJS_VER}_all.deb "${PACKAGES}"
+		cd ../..
+	fi
+
+	if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb" ]; then
+		git_clone_or_fetch https://git.proxmox.com/git/pve-xtermjs.git
+		git_clean_and_checkout ${PVE_XTERMJS_GIT} pve-xtermjs
+		patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-arm.patch"
+		[[ "${BUILD_PROFILES}" =~ cross ]] && patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-cross.patch"
+		cd pve-xtermjs/
+		git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
+		git_clean_and_checkout ${PROXMOX_XTERMJS_GIT} proxmox
+		cd termproxy
+		set_package_info
+		${SUDO} apt -y -a${HOST_ARCH} build-dep .
+		BUILD_MODE=release make deb
+		cd ../..
+		mv -f proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb "${PACKAGES}"
+	fi
 else
-  echo "pve-xtermjs up-to-date"
+  echo "pve-xtermjs/proxmox-termproxy up-to-date"
 fi
+
+PROXMOX_JOURNALREADER_VER="1.6-1"
+PROXMOX_JOURNALREADER_GIT="b09ee543344fb7082a27346ecb0008f38af6367d"
+if [ ! -e "${PACKAGES}/proxmox-mini-journalreader_${PROXMOX_JOURNALREADER_VER}_${HOST_ARCH}.deb" ]; then
+	git_clone_or_fetch https://git.proxmox.com/git/proxmox-mini-journalreader.git
+	git_clean_and_checkout ${PROXMOX_JOURNALREADER_GIT} proxmox-mini-journalreader
+	patch -p1 -d proxmox-mini-journalreader/ <${PATCHES}/proxmox-mini-journalreader.patch
+	[[ "${BUILD_PROFILES}" =~ cross ]] &&
+		patch -p1 -d proxmox-mini-journalreader/ <"${PATCHES}/proxmox-mini-journalreader-cross.patch"
+	cd proxmox-mini-journalreader/
+	set_package_info
+	${SUDO} apt -y -a${PACKAGE_ARCH} build-dep .
+	make deb
+	mv -f proxmox-mini-journalreader{,-dbgsym}_${PROXMOX_JOURNALREADER_VER}_${HOST_ARCH}.deb "${PACKAGES}"
+	cd ..
+else
+	echo "proxmox-mini-journalreader up-to-date"
+fi
+
+# Remove debug symbol packages from output directory.
+rm -f "${PACKAGES}"/*-dbgsym_*.deb "${PACKAGES}"/*.ddeb

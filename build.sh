@@ -369,6 +369,116 @@ function download_runtime_arch_all_dependencies() {
 	done
 }
 
+function dependency_constraint_from_deb() {
+	deb=${1}
+	wanted=${2}
+
+	fields="$(dpkg-deb -f "${deb}" Pre-Depends Depends Recommends 2>/dev/null || true)"
+	[ -n "${fields}" ] || return 1
+
+	local line dep alt package_name relation required_version version_re
+	while IFS= read -r line; do
+		# Check every alternative, not only the first one, because packages may use
+		# alternatives for helper packages.
+		while IFS='|' read -r alt; do
+			dep="${alt}"
+			dep="${dep#"${dep%%[![:space:]]*}"}"
+			dep="${dep%"${dep##*[![:space:]]}"}"
+			[ -n "${dep}" ] || continue
+
+			package_name="${dep%% *}"
+			package_name="${package_name%%:*}"
+			[ "${package_name}" = "${wanted}" ] || continue
+
+			relation=""
+			required_version=""
+			version_re='\(([^[:space:]]+)[[:space:]]+([^)]*)\)'
+			if [[ "${dep}" =~ ${version_re} ]]; then
+				relation="${BASH_REMATCH[1]}"
+				required_version="${BASH_REMATCH[2]}"
+			fi
+
+			printf '%s;%s\n' "${relation}" "${required_version}"
+			return 0
+		done <<<"${line}"
+	done < <(printf '%s\n' "${fields}" | tr ',' '\n')
+
+	return 1
+}
+
+function package_version_satisfying() {
+	repo=${1}
+	package_name=${2}
+	relation=${3:-}
+	required_version=${4:-}
+
+	if [[ "${repo}" == "pdm" ]]; then
+		packages_target=${PACKAGES_PDM}
+	elif [[ "${repo}" == "devel" ]]; then
+		packages_target=${PACKAGES_DEVEL}
+	elif [[ "${repo}" == "pve" ]]; then
+		packages_target=${PACKAGES_PVE}
+	else
+		echo "Unknown repo ${repo}" >&2
+		return 1
+	fi
+
+	version_target=""
+	while IFS=';' read -r name version file depends; do
+		[[ "${name}" == "${package_name}" ]] || continue
+		[ -n "${version}" ] || continue
+
+		if [ -n "${relation}" ] && [ -n "${required_version}" ]; then
+			dpkg --compare-versions "${version}" "${relation}" "${required_version}" || continue
+		fi
+
+		if [ -z "${version_target}" ] || dpkg --compare-versions "${version}" '>>' "${version_target}"; then
+			version_target=${version}
+		fi
+	done <<<"${packages_target}"
+
+	[ -n "${version_target}" ] || return 1
+	echo "${version_target}"
+}
+
+function resolve_commit_for_package_version() {
+	version=${1}
+	repo_path=${2}
+	package_name=${3}
+
+	# BinNMUs such as 1.2.3-1+b1 do not normally appear in source changelogs.
+	source_version=${version%%+*}
+	upstream=${source_version%%-*}
+
+	for pattern in "${source_version}" "${version}" "${upstream}"; do
+		for tag in $(git -C "${repo_path}" tag -l "*${pattern}*" 2>/dev/null); do
+			commit=$(git -C "${repo_path}" rev-list -n1 "${tag}" 2>/dev/null || true)
+			if [ -n "${commit}" ]; then
+				echo "${commit}"
+				return 0
+			fi
+		done
+	done
+
+	# Search all Debian changelogs in the repository. Some Proxmox repos contain
+	# multiple packages below subdirectories, for example pve-xtermjs/termproxy.
+	local changelog commit
+	while IFS= read -r changelog; do
+		commit=$(git -C "${repo_path}" log --all --format="%H" -1 -S "${package_name} (${source_version}" -- "${changelog}" 2>/dev/null || true)
+		[ -n "${commit}" ] && { echo "${commit}"; return 0; }
+
+		commit=$(git -C "${repo_path}" log --all --format="%H" -1 -S "${package_name} (${upstream}" -- "${changelog}" 2>/dev/null || true)
+		[ -n "${commit}" ] && { echo "${commit}"; return 0; }
+	done < <(git -C "${repo_path}" ls-files '*debian/changelog' 2>/dev/null)
+
+	commit=$(git -C "${repo_path}" log --all --format="%H" -1 --grep="bump version to ${source_version}" 2>/dev/null || true)
+	[ -n "${commit}" ] && { echo "${commit}"; return 0; }
+	commit=$(git -C "${repo_path}" log --all --format="%H" -1 --grep="bump version to ${upstream}" 2>/dev/null || true)
+	[ -n "${commit}" ] && { echo "${commit}"; return 0; }
+
+	return 1
+}
+
 
 function latest_package_version() {
 	repo=${1}
@@ -973,27 +1083,44 @@ pdm_runtime_debs=(
 download_runtime_arch_all_dependencies "${pdm_runtime_debs[@]}"
 
 PVE_XTERMJS_VER="$(latest_package_version pve pve-xtermjs)"
-PROXMOX_TERMPROXY_VER=""
 
+# Download pve-xtermjs first, then use its package metadata to determine which
+# proxmox-termproxy version should be built. This avoids hardcoding both the
+# xtermjs commit and the termproxy version.
 echo "Using pve-xtermjs package version: ${PVE_XTERMJS_VER}"
-
 if [ ! -e "${PACKAGES}/pve-xtermjs_${PVE_XTERMJS_VER}_all.deb" ]; then
 	echo "Downloading Architecture:all pve-xtermjs package"
-	download_package pve pve-xtermjs "${PVE_XTERMJS_VER}" "${PACKAGES}" >/dev/null
+	pve_xtermjs_deb="$(download_package pve pve-xtermjs "${PVE_XTERMJS_VER}" "${PACKAGES}")"
 else
 	echo "pve-xtermjs up-to-date"
+	pve_xtermjs_deb="${PACKAGES}/pve-xtermjs_${PVE_XTERMJS_VER}_all.deb"
+fi
+
+termproxy_constraint="$(dependency_constraint_from_deb "${pve_xtermjs_deb}" proxmox-termproxy || true)"
+if [ -n "${termproxy_constraint}" ]; then
+	termproxy_relation="${termproxy_constraint%%;*}"
+	termproxy_required_version="${termproxy_constraint#*;}"
+	PROXMOX_TERMPROXY_VER="$(package_version_satisfying pve proxmox-termproxy "${termproxy_relation}" "${termproxy_required_version}")"
+	echo "Using proxmox-termproxy package version from pve-xtermjs dependency: ${PROXMOX_TERMPROXY_VER}"
+else
+	PROXMOX_TERMPROXY_VER="$(latest_package_version pve proxmox-termproxy)"
+	echo "Warning: pve-xtermjs does not declare proxmox-termproxy dependency; using latest available ${PROXMOX_TERMPROXY_VER}" >&2
 fi
 
 git_clone_or_fetch https://git.proxmox.com/git/pve-xtermjs.git
-PVE_XTERMJS_GIT="$(resolve_commit_for_debian_version "${PVE_XTERMJS_VER}" pve-xtermjs pve-xtermjs || true)"
+PVE_XTERMJS_GIT="$(resolve_commit_for_package_version "${PROXMOX_TERMPROXY_VER}" pve-xtermjs proxmox-termproxy || true)"
 if [ -z "${PVE_XTERMJS_GIT}" ]; then
-	echo "Error: could not resolve pve-xtermjs commit for version ${PVE_XTERMJS_VER}" >&2
+	echo "Error: could not resolve pve-xtermjs commit containing proxmox-termproxy ${PROXMOX_TERMPROXY_VER}" >&2
+	echo "Available changelog heads:" >&2
+	git -C pve-xtermjs ls-files '*debian/changelog' | while read -r changelog; do
+		echo "--- ${changelog}" >&2
+		git -C pve-xtermjs show "HEAD:${changelog}" 2>/dev/null | head -5 >&2 || true
+	done
 	exit 1
 fi
 
+echo "Using pve-xtermjs commit for proxmox-termproxy ${PROXMOX_TERMPROXY_VER}: ${PVE_XTERMJS_GIT}"
 git_clean_and_checkout ${PVE_XTERMJS_GIT} pve-xtermjs
-PROXMOX_TERMPROXY_VER="$(cd pve-xtermjs/termproxy && dpkg-parsechangelog -SVersion)"
-echo "Using proxmox-termproxy package version: ${PROXMOX_TERMPROXY_VER}"
 
 if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb" ]; then
 	patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-arm.patch"
@@ -1011,9 +1138,9 @@ if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.d
 	set_package_info
 	${SUDO} apt -y -a${HOST_ARCH} build-dep .
 	if [[ "${BUILD_PROFILES}" =~ cross ]]; then
-    	# The upstream Makefile runs lintian after building. Cross builds may use nostrip,
-	    # which makes lintian fail even though the package was built correctly.
-	    sed -i 's|^\([[:space:]]*\)lintian \(.*\)$|\1- lintian \2|' Makefile
+		# The upstream Makefile runs lintian after building. Cross builds may use nostrip,
+		# which makes lintian fail even though the package was built correctly.
+		sed -i 's|^\([[:space:]]*\)lintian \(.*\)$|\1- lintian \2|' Makefile
 	fi
 	BUILD_MODE=release make deb
 	cd ../..
@@ -1062,3 +1189,4 @@ fi
 
 # Remove debug symbol packages from output directory.
 rm -f "${PACKAGES}"/*-dbgsym_*.deb "${PACKAGES}"/*.ddeb
+

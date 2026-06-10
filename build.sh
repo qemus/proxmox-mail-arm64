@@ -737,16 +737,12 @@ ${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
 export DEB_VERSION=$(dpkg-parsechangelog -SVersion)
 export DEB_VERSION_UPSTREAM=$(dpkg-parsechangelog -SVersion | cut -d- -f1)
 
-if [[ "${BUILD_PROFILES}" =~ cross ]]; then
-  echo "Cross build: building only Architecture:any PDM packages"
-  dpkg-buildpackage -a${HOST_ARCH} -B -us -uc ${BUILD_PROFILES}
+echo "Building only Architecture:any PDM packages"
+dpkg-buildpackage -a${HOST_ARCH} -B -us -uc ${BUILD_PROFILES}
 
-  echo "Cross build: downloading Architecture:all PDM packages (latest available <= requested)"
-  download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-ui "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
-  download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-docs "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
-else
-  dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
-fi
+echo "Downloading Architecture:all PDM packages (latest available <= requested)"
+download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-ui "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
+download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-docs "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
 cd ..
 
 shopt -s nullglob
@@ -754,9 +750,6 @@ artifacts=(
   proxmox-datacenter-manager{,-dbgsym}_${PROXMOX_DM_VER}_${HOST_ARCH}.*
   proxmox-datacenter-manager-client{,-dbgsym}_${PROXMOX_DM_VER}_${HOST_ARCH}.*
 )
-if [[ ! "${BUILD_PROFILES}" =~ cross ]]; then
-  artifacts+=(proxmox-datacenter-manager-docs_${PROXMOX_DM_VER}_all.*)
-fi
 shopt -u nullglob
 
 if [ "${#artifacts[@]}" -eq 0 ]; then
@@ -772,41 +765,34 @@ PVE_XTERMJS_GIT="1209ea0d5bda89fec71484d09f784bd3b94fafaf"
 PROXMOX_XTERMJS_GIT="deb32a6c4a21bea0d72059de0835fde504296bf0"
 PROXMOX_TERMPROXY_VER="2.1.0"
 
-if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb" ] ||
-   [ ! -e "${PACKAGES}/pve-xtermjs_${PVE_XTERMJS_VER}_all.deb" ]; then
-	if [[ "${BUILD_PROFILES}" =~ cross ]]; then
-		echo "Cross build: downloading Architecture:all pve-xtermjs package"
-		download_package_prefix_no_deps pve pve-xtermjs "${PVE_XTERMJS_VER}" "${PACKAGES}" >/dev/null
-	else
-		git_clone_or_fetch https://git.proxmox.com/git/pve-xtermjs.git
-		git_clean_and_checkout ${PVE_XTERMJS_GIT} pve-xtermjs
-		patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-arm.patch"
-		cd pve-xtermjs/
-		cd xterm.js
-		make deb
-		mv -f pve-xtermjs_${PVE_XTERMJS_VER}_all.deb "${PACKAGES}"
-		cd ../..
-	fi
-
-	if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb" ]; then
-		git_clone_or_fetch https://git.proxmox.com/git/pve-xtermjs.git
-		git_clean_and_checkout ${PVE_XTERMJS_GIT} pve-xtermjs
-		patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-arm.patch"
-		[[ "${BUILD_PROFILES}" =~ cross ]] && patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-cross.patch"
-		cd pve-xtermjs/
-		git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
-		git_clean_and_checkout ${PROXMOX_XTERMJS_GIT} proxmox
-		cd termproxy
-		set_package_info
-        ${SUDO} apt -y -a${HOST_ARCH} build-dep .
-        # Do not fail the cross build on lintian warnings/errors.
-        sed -i 's|^\(\s*\)lintian \(.*\)$|\1- lintian \2|' Makefile
-        BUILD_MODE=release make deb
-		cd ../..
-		mv -f proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb "${PACKAGES}"
-	fi
+if [ ! -e "${PACKAGES}/pve-xtermjs_${PVE_XTERMJS_VER}_all.deb" ]; then
+	echo "Downloading Architecture:all pve-xtermjs package"
+	download_package_prefix_no_deps pve pve-xtermjs "${PVE_XTERMJS_VER}" "${PACKAGES}" >/dev/null
 else
-  echo "pve-xtermjs/proxmox-termproxy up-to-date"
+	echo "pve-xtermjs up-to-date"
+fi
+
+if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb" ]; then
+	git_clone_or_fetch https://git.proxmox.com/git/pve-xtermjs.git
+	git_clean_and_checkout ${PVE_XTERMJS_GIT} pve-xtermjs
+	patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-arm.patch"
+	[[ "${BUILD_PROFILES}" =~ cross ]] && patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-cross.patch"
+	cd pve-xtermjs/
+	git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
+	git_clean_and_checkout ${PROXMOX_XTERMJS_GIT} proxmox
+	cd termproxy
+	set_package_info
+	${SUDO} apt -y -a${HOST_ARCH} build-dep .
+	if [[ "${BUILD_PROFILES}" =~ cross ]]; then
+    	# The upstream Makefile runs lintian after building. Cross builds may use nostrip,
+	    # which makes lintian fail even though the package was built correctly.
+	    sed -i 's|^\([[:space:]]*\)lintian \(.*\)$|\1- lintian \2|' Makefile
+	fi
+	BUILD_MODE=release make deb
+	cd ../..
+	mv -f proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb "${PACKAGES}"
+else
+	echo "proxmox-termproxy up-to-date"
 fi
 
 PROXMOX_JOURNALREADER_VER="1.6-1"

@@ -370,6 +370,72 @@ function download_runtime_arch_all_dependencies() {
 	done
 }
 
+
+function latest_package_version() {
+	repo=${1}
+	package_name=${2}
+
+	if [[ "${repo}" == "pdm" ]]; then
+		packages_target=${PACKAGES_PDM}
+	elif [[ "${repo}" == "devel" ]]; then
+		packages_target=${PACKAGES_DEVEL}
+	elif [[ "${repo}" == "pve" ]]; then
+		packages_target=${PACKAGES_PVE}
+	else
+		echo "Unknown repo ${repo}" >&2
+		return 1
+	fi
+
+	version_target=""
+	while IFS=';' read -r name version file depends; do
+		[[ "${name}" == "${package_name}" ]] || continue
+		[ -n "${version}" ] || continue
+		if [ -z "${version_target}" ] || dpkg --compare-versions "${version}" '>>' "${version_target}"; then
+			version_target=${version}
+		fi
+	done <<<"${packages_target}"
+
+	[ -n "${version_target}" ] || return 1
+	echo "${version_target}"
+}
+
+function download_package_latest() {
+	repo=${1}
+	package=${2}
+	dest=${3}
+	version=$(latest_package_version "${repo}" "${package}")
+	download_package "${repo}" "${package}" "${version}" "${dest}"
+}
+
+function resolve_commit_for_debian_version() {
+	version=${1}
+	repo_path=${2}
+	package_name=${3:-}
+	upstream=${version%%-*}
+
+	for tag in $(git -C "${repo_path}" tag -l "*${version}*" 2>/dev/null; git -C "${repo_path}" tag -l "*${upstream}*" 2>/dev/null); do
+		commit=$(git -C "${repo_path}" rev-list -n1 "${tag}" 2>/dev/null || true)
+		if [ -n "${commit}" ]; then
+			echo "${commit}"
+			return 0
+		fi
+	done
+
+	if [ -n "${package_name}" ]; then
+		commit=$(git -C "${repo_path}" log --all --format="%H" -1 -S "${package_name} (${version}" -- debian/changelog 2>/dev/null || true)
+		[ -n "${commit}" ] && { echo "${commit}"; return 0; }
+		commit=$(git -C "${repo_path}" log --all --format="%H" -1 -S "${package_name} (${upstream}" -- debian/changelog 2>/dev/null || true)
+		[ -n "${commit}" ] && { echo "${commit}"; return 0; }
+	fi
+
+	commit=$(git -C "${repo_path}" log --all --format="%H" -1 --grep="bump version to ${version}" -- debian/changelog 2>/dev/null || true)
+	[ -n "${commit}" ] && { echo "${commit}"; return 0; }
+	commit=$(git -C "${repo_path}" log --all --format="%H" -1 --grep="bump version to ${upstream}" -- debian/changelog 2>/dev/null || true)
+	[ -n "${commit}" ] && { echo "${commit}"; return 0; }
+
+	return 1
+}
+
 function git_clone_or_fetch() {
 	url=${1}              # url/name.git
 	name_git=${url##*/}   # name.git
@@ -740,31 +806,23 @@ echo "Download packages list from PVE repository"
 PACKAGES_PVE=$(load_packages http://download.proxmox.com/debian/pve/dists/trixie/pve-no-subscription/binary-amd64/Packages.gz)
 
 echo "Download dependencies"
-EXTJS_VER=(">=" "7~")
-PDM_I18N_VER=(">=" "3.6.0")
-PROXMOX_ACME_VER=(">=" "1.7.0")
-PROXMOX_WIDGETTOOLKIT_VER=(">=" "5.0.2")
 if [ "${BUILD_PACKAGE}" = "server" ]; then
-    download_package pdm pdm-i18n "${PDM_I18N_VER[@]}" "${PACKAGES}" >/dev/null
-	libjs_extjs="$(download_package pdm libjs-extjs "${EXTJS_VER[@]}" "${PACKAGES}")"
-	proxmox_widget_toolkit="$(download_package pdm proxmox-widget-toolkit "${PROXMOX_WIDGETTOOLKIT_VER[@]}" "${PACKAGES}")"
-	download_package pdm libproxmox-acme-plugins "${PROXMOX_ACME_VER[@]}" "${PACKAGES}" >/dev/null
+	# Build/runtime helper packages are selected dynamically from the loaded
+	# repository metadata, instead of pinning minimum versions in this script.
+	download_package_latest pdm pdm-i18n "${PACKAGES}" >/dev/null || true
+	libjs_extjs="$(download_package_latest pdm libjs-extjs "${PACKAGES}")"
+	proxmox_widget_toolkit="$(download_package_latest pdm proxmox-widget-toolkit "${PACKAGES}")"
+	download_package_latest pdm libproxmox-acme-plugins "${PACKAGES}" >/dev/null || true
 
 	packages_install=(
 		"${libjs_extjs}"
 		"${proxmox_widget_toolkit}"
-		"$(download_package devel proxmox-widget-toolkit-dev "${PROXMOX_WIDGETTOOLKIT_VER[@]}" "${PACKAGES_BUILD}")"
+		"$(download_package_latest devel proxmox-widget-toolkit-dev "${PACKAGES_BUILD}")"
 	)
 fi
 
 echo "Install build dependencies"
 ${SUDO} apt install -y "${packages_install[@]}"
-
-cat <<EOF >rust-toolchain.toml
-[toolchain]
-channel="1.94.0"
-targets = [ "${CARGO_BUILD_TARGET:-$(rustc -vV 2>/dev/null | awk '/^host/ { print $2 }')}" ]
-EOF
 
 cd "${SOURCES}"
 
@@ -800,6 +858,19 @@ echo "Using Proxmox commit: ${PROXMOX_GIT}"
 
 git_clean_and_checkout ${PROXMOX_GIT} proxmox
 git_clean_and_checkout ${PROXMOX_DM_GIT} proxmox-datacenter-manager
+
+# Use the project's Rust toolchain file when present. If the source does not
+# ship one, fall back to the currently installed rustup toolchain instead of
+# hardcoding a compiler version here.
+if [ -f proxmox-datacenter-manager/rust-toolchain.toml ]; then
+	cp proxmox-datacenter-manager/rust-toolchain.toml "${BASE}/rust-toolchain.toml"
+else
+	cat <<EOF >"${BASE}/rust-toolchain.toml"
+[toolchain]
+channel="$(rustc -vV 2>/dev/null | awk '/^release:/ { print $2 }')"
+targets = [ "${CARGO_BUILD_TARGET:-$(rustc -vV 2>/dev/null | awk '/^host:/ { print $2 }')}" ]
+EOF
+fi
 
 sed -i '/dh-cargo\|cargo:native\|rustc:native\|librust-\|libstd-rust-dev/d' proxmox-datacenter-manager/debian/control
 sed -i '/libjs-extjs\|libproxmox-acme-plugins\|libsystemd-dev\|proxmox-widget-toolkit[^-]/d' proxmox-datacenter-manager/debian/control
@@ -902,29 +973,38 @@ pdm_runtime_debs=(
 )
 download_runtime_arch_all_dependencies "${pdm_runtime_debs[@]}"
 
-PVE_XTERMJS_VER="6.0.0-1"
-PVE_XTERMJS_GIT="1209ea0d5bda89fec71484d09f784bd3b94fafaf"
-PROXMOX_XTERMJS_GIT_FALLBACK="deb32a6c4a21bea0d72059de0835fde504296bf0"
-PROXMOX_TERMPROXY_VER="2.1.0"
+PVE_XTERMJS_VER="$(latest_package_version pve pve-xtermjs)"
+PROXMOX_TERMPROXY_VER=""
+
+echo "Using pve-xtermjs package version: ${PVE_XTERMJS_VER}"
 
 if [ ! -e "${PACKAGES}/pve-xtermjs_${PVE_XTERMJS_VER}_all.deb" ]; then
 	echo "Downloading Architecture:all pve-xtermjs package"
-	download_package_prefix_no_deps pve pve-xtermjs "${PVE_XTERMJS_VER}" "${PACKAGES}" >/dev/null
+	download_package pve pve-xtermjs "${PVE_XTERMJS_VER}" "${PACKAGES}" >/dev/null
 else
 	echo "pve-xtermjs up-to-date"
 fi
 
+git_clone_or_fetch https://git.proxmox.com/git/pve-xtermjs.git
+PVE_XTERMJS_GIT="$(resolve_commit_for_debian_version "${PVE_XTERMJS_VER}" pve-xtermjs pve-xtermjs || true)"
+if [ -z "${PVE_XTERMJS_GIT}" ]; then
+	echo "Error: could not resolve pve-xtermjs commit for version ${PVE_XTERMJS_VER}" >&2
+	exit 1
+fi
+
+git_clean_and_checkout ${PVE_XTERMJS_GIT} pve-xtermjs
+PROXMOX_TERMPROXY_VER="$(cd pve-xtermjs/termproxy && dpkg-parsechangelog -SVersion)"
+echo "Using proxmox-termproxy package version: ${PROXMOX_TERMPROXY_VER}"
+
 if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb" ]; then
-	git_clone_or_fetch https://git.proxmox.com/git/pve-xtermjs.git
-	git_clean_and_checkout ${PVE_XTERMJS_GIT} pve-xtermjs
 	patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-arm.patch"
 	[[ "${BUILD_PROFILES}" =~ cross ]] && patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-cross.patch"
 	cd pve-xtermjs/
 	git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
 	PROXMOX_XTERMJS_GIT="$(resolve_commit_before "${PVE_XTERMJS_GIT}" . proxmox || true)"
 	if [ -z "${PROXMOX_XTERMJS_GIT}" ]; then
-		echo "Warning: could not derive Proxmox commit for pve-xtermjs; using fallback ${PROXMOX_XTERMJS_GIT_FALLBACK}" >&2
-		PROXMOX_XTERMJS_GIT="${PROXMOX_XTERMJS_GIT_FALLBACK}"
+		echo "Error: could not derive Proxmox commit for pve-xtermjs ${PVE_XTERMJS_GIT}" >&2
+		exit 1
 	fi
 	echo "Using pve-xtermjs Proxmox commit: ${PROXMOX_XTERMJS_GIT}"
 	git_clean_and_checkout ${PROXMOX_XTERMJS_GIT} proxmox
@@ -950,11 +1030,18 @@ else
 	echo "proxmox-termproxy up-to-date"
 fi
 
-PROXMOX_JOURNALREADER_VER="1.6-1"
-PROXMOX_JOURNALREADER_GIT="b09ee543344fb7082a27346ecb0008f38af6367d"
+git_clone_or_fetch https://git.proxmox.com/git/proxmox-mini-journalreader.git
+PROXMOX_JOURNALREADER_GIT="$(git -C proxmox-mini-journalreader log --all --format='%H' -1 -- debian/changelog)"
+if [ -z "${PROXMOX_JOURNALREADER_GIT}" ]; then
+	echo "Error: could not resolve proxmox-mini-journalreader commit" >&2
+	exit 1
+fi
+
+git_clean_and_checkout ${PROXMOX_JOURNALREADER_GIT} proxmox-mini-journalreader
+PROXMOX_JOURNALREADER_VER="$(cd proxmox-mini-journalreader && dpkg-parsechangelog -SVersion)"
+echo "Using proxmox-mini-journalreader package version: ${PROXMOX_JOURNALREADER_VER}"
+
 if [ ! -e "${PACKAGES}/proxmox-mini-journalreader_${PROXMOX_JOURNALREADER_VER}_${HOST_ARCH}.deb" ]; then
-	git_clone_or_fetch https://git.proxmox.com/git/proxmox-mini-journalreader.git
-	git_clean_and_checkout ${PROXMOX_JOURNALREADER_GIT} proxmox-mini-journalreader
 	patch -p1 -d proxmox-mini-journalreader/ <${PATCHES}/proxmox-mini-journalreader.patch
 	[[ "${BUILD_PROFILES}" =~ cross ]] &&
 		patch -p1 -d proxmox-mini-journalreader/ <"${PATCHES}/proxmox-mini-journalreader-cross.patch"
@@ -962,7 +1049,13 @@ if [ ! -e "${PACKAGES}/proxmox-mini-journalreader_${PROXMOX_JOURNALREADER_VER}_$
 	set_package_info
 	${SUDO} apt -y -a${HOST_ARCH} build-dep .
 	make deb
-	mv -f proxmox-mini-journalreader{,-dbgsym}_${PROXMOX_JOURNALREADER_VER}_${HOST_ARCH}.deb "${PACKAGES}"
+	journalreader_deb="$(find "${SOURCES}/proxmox-mini-journalreader" -maxdepth 2 -type f -name "proxmox-mini-journalreader_${PROXMOX_JOURNALREADER_VER}_${HOST_ARCH}.deb" -print -quit)"
+	if [ -z "${journalreader_deb}" ]; then
+		echo "Error: proxmox-mini-journalreader .deb not found" >&2
+		find "${SOURCES}/proxmox-mini-journalreader" -maxdepth 3 -type f -name 'proxmox-mini-journalreader*.deb' -ls >&2
+		exit 1
+	fi
+	mv -f "${journalreader_deb}" "${PACKAGES}/"
 	cd ..
 else
 	echo "proxmox-mini-journalreader up-to-date"

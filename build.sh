@@ -253,6 +253,123 @@ function download_package_max_upstream_no_deps() {
 	echo "${file}"
 }
 
+
+function download_arch_all_package_satisfying() {
+	repo=${1}
+	package_name=${2}
+	relation=${3}
+	required_version=${4}
+	dest=${5}
+
+	url_base=http://download.proxmox.com/debian/${repo}
+	if [[ "${repo}" == "pdm" ]]; then
+		packages_target=${PACKAGES_PDM}
+	elif [[ "${repo}" == "devel" ]]; then
+		packages_target=${PACKAGES_DEVEL}
+	elif [[ "${repo}" == "pve" ]]; then
+		packages_target=${PACKAGES_PVE}
+	else
+		return 1
+	fi
+
+	version_target=""
+	file_target=""
+
+	while IFS=';' read -r name version file depends; do
+		[[ "${name}" == "${package_name}" ]] || continue
+		[ -n "${version}" ] || continue
+
+		# Only auto-download Architecture:all packages. The package lists are
+		# amd64 indices, so downloading Architecture:any packages here would
+		# accidentally pull amd64 binaries into an ARM64 release.
+		[[ "${file##*/}" == *_all.deb ]] || continue
+
+		if [ -n "${relation}" ] && [ -n "${required_version}" ]; then
+			dpkg --compare-versions "${version}" "${relation}" "${required_version}" || continue
+		fi
+
+		if [ -z "${version_target}" ] || dpkg --compare-versions "${version}" '>>' "${version_target}"; then
+			version_target=${version}
+			file_target=${file}
+		fi
+	done <<<"${packages_target}"
+
+	[ -n "${file_target}" ] || return 1
+
+	url=${url_base}/${file_target}
+	file="${dest}/${url##*/}"
+
+	if [ -e "${file}" ]; then
+		echo "${package_name} ${version_target} up-to-date" >&2
+		echo "${file}"
+		return 0
+	fi
+
+	echo "${package_name} ${version_target} downloading runtime dependency...${url}" >&2
+	curl -sSfL "${url}" -o "${file}"
+	echo "${file}"
+}
+
+function download_runtime_arch_all_dependency() {
+	package_name=${1}
+	relation=${2:-}
+	required_version=${3:-}
+	dest=${4}
+
+	# Try the project-specific repositories first, then the shared devel repo.
+	for repo in pdm pve devel; do
+		if file=$(download_arch_all_package_satisfying "${repo}" "${package_name}" "${relation}" "${required_version}" "${dest}" 2>/dev/null); then
+			echo "${file}"
+			return 0
+		fi
+	done
+
+	return 1
+}
+
+function download_runtime_arch_all_dependencies() {
+	if [ "$#" -eq 0 ]; then
+		return 0
+	fi
+
+	echo "Resolving Architecture:all runtime dependencies from built package metadata"
+
+	local deb fields line dep package_name relation required_version
+
+	for deb in "$@"; do
+		[ -e "${deb}" ] || continue
+
+		fields="$(dpkg-deb -f "${deb}" Pre-Depends Depends Recommends 2>/dev/null || true)"
+		[ -n "${fields}" ] || continue
+
+		while IFS= read -r line; do
+			# Use the first alternative. If that alternative is not in a Proxmox
+			# repo as Architecture:all, it is simply ignored.
+			dep="${line%%|*}"
+
+			# trim whitespace
+			dep="${dep#"${dep%%[![:space:]]*}"}"
+			dep="${dep%"${dep##*[![:space:]]}"}"
+			[ -n "${dep}" ] || continue
+
+			package_name="${dep%% *}"
+			package_name="${package_name%%:*}"
+			[ -n "${package_name}" ] || continue
+
+			relation=""
+			required_version=""
+
+			version_re='\\(([^[:space:]]+)[[:space:]]+([^)]*)\\)'
+			if [[ "${dep}" =~ ${version_re} ]]; then
+				relation="${BASH_REMATCH[1]}"
+				required_version="${BASH_REMATCH[2]}"
+			fi
+
+			download_runtime_arch_all_dependency "${package_name}" "${relation}" "${required_version}" "${PACKAGES}" >/dev/null || true
+		done < <(printf '%s\n' "${fields}" | tr ',' '\n')
+	done
+}
+
 function git_clone_or_fetch() {
 	url=${1}              # url/name.git
 	name_git=${url##*/}   # name.git
@@ -778,6 +895,12 @@ if [ "${#artifacts[@]}" -eq 0 ]; then
 fi
 
 mv -f "${artifacts[@]}" "${PACKAGES}"
+
+pdm_runtime_debs=(
+  "${PACKAGES}/proxmox-datacenter-manager_${PROXMOX_DM_VER}_${HOST_ARCH}.deb"
+  "${PACKAGES}/proxmox-datacenter-manager-client_${PROXMOX_DM_VER}_${HOST_ARCH}.deb"
+)
+download_runtime_arch_all_dependencies "${pdm_runtime_debs[@]}"
 
 PVE_XTERMJS_VER="6.0.0-1"
 PVE_XTERMJS_GIT="1209ea0d5bda89fec71484d09f784bd3b94fafaf"

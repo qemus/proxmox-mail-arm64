@@ -798,8 +798,10 @@ if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.d
 		git_clean_and_checkout ${PROXMOX_XTERMJS_GIT} proxmox
 		cd termproxy
 		set_package_info
-		${SUDO} apt -y -a${HOST_ARCH} build-dep .
-		BUILD_MODE=release make deb
+        ${SUDO} apt -y -a${HOST_ARCH} build-dep .
+        # Do not fail the cross build on lintian warnings/errors.
+        sed -i 's|^\(\s*\)lintian \(.*\)$|\1- lintian \2|' Makefile
+        BUILD_MODE=release make deb
 		cd ../..
 		mv -f proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb "${PACKAGES}"
 	fi

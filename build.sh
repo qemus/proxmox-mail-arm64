@@ -688,3 +688,5 @@ if [ ! -e "${PACKAGES}/proxmox-mini-journalreader_${PROXMOX_JOURNALREADER_VER}_$
 else
 	echo "proxmox-mini-journalreader up-to-date"
 fi
+
+rm -f "${PACKAGES}"/*-dbgsym_*.deb

@@ -593,13 +593,15 @@ function set_package_info() {
 }
 
 function repack_deb_as_all() {
-  deb="$1"
+  local deb="$1"
+  local tmp out
+
   tmp="$(mktemp -d)"
   out="${deb%_amd64.deb}_all.deb"
 
-  dpkg-deb -R "$deb" "$tmp"
+  dpkg-deb -R "$deb" "$tmp" >&2
   sed -i 's/^Architecture: .*/Architecture: all/' "$tmp/DEBIAN/control"
-  dpkg-deb -b "$tmp" "$out"
+  dpkg-deb -b "$tmp" "$out" >&2
 
   rm -rf "$tmp"
   rm -f "$deb"
@@ -934,11 +936,14 @@ if [ "$(dpkg-deb -f "$ui_deb" Architecture)" = "amd64" ]; then
   ui_deb="$(repack_deb_as_all "$ui_deb")" || exit 1
 fi
 
+if [ ! -s "$ui_deb" ]; then
+  echo "Failed to download UI package!" >&2 && exit 1
+fi
+
 echo "Downloading docs package..."
 docs_deb="$(download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-docs "${DEB_VERSION_UPSTREAM}" "${PACKAGES}")"
-
-if [ ! -s "$ui_deb" ] || [ ! -s "$docs_deb" ]; then
-  echo "Failed to download packages!" >&2 && exit 1
+if [ ! -s "$docs_deb" ]; then
+  echo "Failed to download Docs package!" >&2 && exit 1
 fi
 
 cd ..

@@ -75,9 +75,7 @@ function download_package_by_upstream_version() {
 			esac
 
 			if dpkg --compare-versions "${version}" '>>' "${version_target}"; then
-				if [ -n "${depends}" ]; then
-					${SUDO} apt satisfy -s "${depends}" >/dev/null 2>&1 || continue
-				fi
+				# Do not pre-filter packages by simulating their dependencies here.
 				version_target=${version}
 				file_target=${file}
 			fi
@@ -359,6 +357,27 @@ function resolve_proxmox_commit() {
 	return 1
 }
 
+
+function resolve_commit_before() {
+	source_commit=${1}
+	source_path=${2}
+	target_path=${3}
+
+	# Pick the newest commit in target_path at or before source_commit's date.
+	# This keeps bundled/nested Proxmox checkouts aligned with the project that uses them
+	# without needing to manually maintain a second hardcoded commit hash.
+	source_date=$(git -C "${source_path}" show -s --format=%ci "${source_commit}" 2>/dev/null || true)
+	if [ -n "${source_date}" ]; then
+		commit=$(git -C "${target_path}" log --all --format="%H" -1 --before="${source_date}" 2>/dev/null || true)
+		if [ -n "${commit}" ]; then
+			echo "${commit}"
+			return 0
+		fi
+	fi
+
+	return 1
+}
+
 function load_packages() {
 	url=${1}
 	curl -sSf -H 'Cache-Control: no-cache' "${url}" |
@@ -414,9 +433,9 @@ function select_package() {
 			depends=${line}
 			if dpkg --compare-versions "${version}" "${version_test[@]}" &&
 				dpkg --compare-versions "${version}" '>>' "${version_target}"; then
-				if [ -n "$depends" ]; then
-					${SUDO} apt satisfy -s "${depends}" >/dev/null 2>&1 || continue
-				fi
+				# Do not pre-filter packages by simulating their dependencies here.
+				# The local build root might not yet have all repos/arches enabled,
+				# which can make apt satisfy reject an otherwise valid downloadable package.
 				version_target=${version}
 				file_target=${file}
 			fi
@@ -762,7 +781,7 @@ mv -f "${artifacts[@]}" "${PACKAGES}"
 
 PVE_XTERMJS_VER="6.0.0-1"
 PVE_XTERMJS_GIT="1209ea0d5bda89fec71484d09f784bd3b94fafaf"
-PROXMOX_XTERMJS_GIT="deb32a6c4a21bea0d72059de0835fde504296bf0"
+PROXMOX_XTERMJS_GIT_FALLBACK="deb32a6c4a21bea0d72059de0835fde504296bf0"
 PROXMOX_TERMPROXY_VER="2.1.0"
 
 if [ ! -e "${PACKAGES}/pve-xtermjs_${PVE_XTERMJS_VER}_all.deb" ]; then
@@ -779,6 +798,12 @@ if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.d
 	[[ "${BUILD_PROFILES}" =~ cross ]] && patch -p1 -d pve-xtermjs/ <"${PATCHES}/pve-xtermjs-cross.patch"
 	cd pve-xtermjs/
 	git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
+	PROXMOX_XTERMJS_GIT="$(resolve_commit_before "${PVE_XTERMJS_GIT}" . proxmox || true)"
+	if [ -z "${PROXMOX_XTERMJS_GIT}" ]; then
+		echo "Warning: could not derive Proxmox commit for pve-xtermjs; using fallback ${PROXMOX_XTERMJS_GIT_FALLBACK}" >&2
+		PROXMOX_XTERMJS_GIT="${PROXMOX_XTERMJS_GIT_FALLBACK}"
+	fi
+	echo "Using pve-xtermjs Proxmox commit: ${PROXMOX_XTERMJS_GIT}"
 	git_clean_and_checkout ${PROXMOX_XTERMJS_GIT} proxmox
 	cd termproxy
 	set_package_info
@@ -790,7 +815,14 @@ if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.d
 	fi
 	BUILD_MODE=release make deb
 	cd ../..
-    mv -f ../../proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb "${PACKAGES}"
+	termproxy_deb="$(find "${SOURCES}/pve-xtermjs" -maxdepth 2 -type f -name "proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb" -print -quit)"
+	if [ -z "${termproxy_deb}" ]; then
+		echo "Error: proxmox-termproxy .deb not found" >&2
+		find "${SOURCES}/pve-xtermjs" -maxdepth 3 -type f -name 'proxmox-termproxy*.deb' -ls >&2
+		exit 1
+	fi
+	mv -f "${termproxy_deb}" "${PACKAGES}/"
+	rm -f "${SOURCES}/pve-xtermjs"/proxmox-termproxy-dbgsym_*.deb "${SOURCES}/pve-xtermjs"/termproxy/proxmox-termproxy-dbgsym_*.deb
 else
 	echo "proxmox-termproxy up-to-date"
 fi
@@ -805,7 +837,7 @@ if [ ! -e "${PACKAGES}/proxmox-mini-journalreader_${PROXMOX_JOURNALREADER_VER}_$
 		patch -p1 -d proxmox-mini-journalreader/ <"${PATCHES}/proxmox-mini-journalreader-cross.patch"
 	cd proxmox-mini-journalreader/
 	set_package_info
-	${SUDO} apt -y -a${PACKAGE_ARCH} build-dep .
+	${SUDO} apt -y -a${HOST_ARCH} build-dep .
 	make deb
 	mv -f proxmox-mini-journalreader{,-dbgsym}_${PROXMOX_JOURNALREADER_VER}_${HOST_ARCH}.deb "${PACKAGES}"
 	cd ..

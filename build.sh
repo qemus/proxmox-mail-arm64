@@ -46,6 +46,8 @@ function download_package_by_upstream_version() {
 		packages_target=${PACKAGES_PDM}
 	elif [[ "${repo}" == "devel" ]]; then
 		packages_target=${PACKAGES_DEVEL}
+	elif [[ "${repo}" == "pve" ]]; then
+		packages_target=${PACKAGES_PVE}
 	else
 		echo "Unknown repo ${repo}" >&2
 		return 1
@@ -138,6 +140,8 @@ function download_package_prefix_no_deps() {
 		packages_target=${PACKAGES_PDM}
 	elif [[ "${repo}" == "devel" ]]; then
 		packages_target=${PACKAGES_DEVEL}
+	elif [[ "${repo}" == "pve" ]]; then
+		packages_target=${PACKAGES_PVE}
 	else
 		echo "Unknown repo ${repo}" >&2
 		return 1
@@ -194,6 +198,8 @@ function download_package_max_upstream_no_deps() {
 		packages_target=${PACKAGES_PDM}
 	elif [[ "${repo}" == "devel" ]]; then
 		packages_target=${PACKAGES_DEVEL}
+	elif [[ "${repo}" == "pve" ]]; then
+		packages_target=${PACKAGES_PVE}
 	else
 		echo "Unknown repo ${repo}" >&2
 		return 1
@@ -386,6 +392,8 @@ function select_package() {
 		packages_target=${PACKAGES_PDM}
 	elif [[ "${repo}" == "devel" ]]; then
 		packages_target=${PACKAGES_DEVEL}
+	elif [[ "${repo}" == "pve" ]]; then
+		packages_target=${PACKAGES_PVE}
 	else
 		echo "Unknown repo ${repo}" >&2
 		return 1
@@ -592,6 +600,8 @@ PACKAGES_PDM="$(
 	load_packages http://download.proxmox.com/debian/pdm/dists/trixie/pdm-test/binary-amd64/Packages.gz
 	load_packages http://download.proxmox.com/debian/pdm/dists/trixie/pdm-no-subscription/binary-amd64/Packages.gz
 )"
+echo "Download packages list from PVE repository"
+PACKAGES_PVE=$(load_packages http://download.proxmox.com/debian/pve/dists/trixie/pve-no-subscription/binary-amd64/Packages.gz)
 
 echo "Download dependencies"
 EXTJS_VER=(">=" "7~")
@@ -766,7 +776,7 @@ if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.d
    [ ! -e "${PACKAGES}/pve-xtermjs_${PVE_XTERMJS_VER}_all.deb" ]; then
 	if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 		echo "Cross build: downloading Architecture:all pve-xtermjs package"
-		download_package_prefix_no_deps devel pve-xtermjs "${PVE_XTERMJS_VER}" "${PACKAGES}" >/dev/null
+		download_package_prefix_no_deps pve pve-xtermjs "${PVE_XTERMJS_VER}" "${PACKAGES}" >/dev/null
 	else
 		git_clone_or_fetch https://git.proxmox.com/git/pve-xtermjs.git
 		git_clean_and_checkout ${PVE_XTERMJS_GIT} pve-xtermjs

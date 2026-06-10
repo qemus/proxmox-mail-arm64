@@ -114,7 +114,6 @@ function download_package_with_fallback() {
 		fi
 
 		# Then try the same value as an upstream version and accept Debian revisions
-		# such as 1.1.4-1.
 		if file=$(download_package_by_upstream_version "${repo}" "${package}" "${version}" "${dest}" 2>/dev/null); then
 			echo "${file}"
 			return 0
@@ -742,7 +741,7 @@ function select_package() {
 
 function set_package_info() {
 	if [ "$GITHUB_ACTION" ]; then
-		sed -i "s#^Maintainer:.*#Maintainer: Github Actions <no-reply@github.com>#" debian/control
+		sed -i "s#^Maintainer:.*#Maintainer: Github Action <no-reply@github.com>#" debian/control
 		sed -i "s#^Homepage:.*#Homepage: https://github.com/qemus/proxmox-datacenter-arm64#" debian/control
 	else
 		sed -i "s#^\(Maintainer.*\)\$#\1\nOrigin: https://github.com/qemus/proxmox-datacenter-arm64#" debian/control
@@ -1193,6 +1192,16 @@ if [ ! -e "${PACKAGES}/proxmox-mini-journalreader_${PROXMOX_JOURNALREADER_VER}_$
 else
 	echo "proxmox-mini-journalreader up-to-date"
 fi
+
+# Rename platform independant packages to _all.deb
+for deb in "${PACKAGES}"/*_amd64.deb; do
+  [ -e "$deb" ] || continue
+  arch="$(dpkg-deb -f "$deb" Architecture 2>/dev/null || true)"
+  [ "$arch" = "all" ] || continue
+
+  fixed="${deb%_amd64.deb}_all.deb"
+  mv -f "$deb" "$fixed"
+done
 
 # Remove debug symbol packages from output directory.
 rm -f "${PACKAGES}"/*-dbgsym_*.deb "${PACKAGES}"/*.ddeb

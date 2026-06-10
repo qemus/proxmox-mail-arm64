@@ -45,12 +45,6 @@ jobs:
           val="${{ steps.checkTag.outputs.exists }}"
           echo "exists=${val}" >> $GITHUB_ENV
       -
-        name: Checkout
-        if: env.exists == 'false'
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      -
         name: Free up disk space
         if: env.exists == 'false'
         run: |

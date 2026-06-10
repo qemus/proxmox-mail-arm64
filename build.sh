@@ -919,7 +919,7 @@ git_clone_or_fetch https://git.proxmox.com/git/proxmox-datacenter-manager.git
 
 echo "Resolving commit hashes for version ${PROXMOX_DM_VER}..."
 
-PROXMOX_DM_GIT=$(resolve_dm_commit "${PROXMOX_DM_VER}" proxmox-datacenter-manager) || true
+PROXMOX_DM_GIT=$(resolve_commit "${PROXMOX_DM_VER}" proxmox-datacenter-manager proxmox-datacenter-manager) || true
 if [ -z "${PROXMOX_DM_GIT}" ]; then
   echo "Error: Could not resolve proxmox-datacenter-manager commit for version ${PROXMOX_DM_VER}" >&2
   exit 1
@@ -927,7 +927,7 @@ fi
 
 echo "Using proxmox-datacenter-manager commit: ${PROXMOX_DM_GIT}"
 
-PROXMOX_GIT=$(resolve_proxmox_commit "${PROXMOX_DM_GIT}" proxmox-datacenter-manager proxmox) || true
+PROXMOX_GIT=$(resolve_dependency_repo_commit "${PROXMOX_DM_GIT}" proxmox-datacenter-manager proxmox proxmox-sys) || true
 if [ -z "${PROXMOX_GIT}" ]; then
   echo "Error: Could not resolve proxmox commit for version ${PROXMOX_DM_VER}" >&2
   exit 1

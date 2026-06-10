@@ -592,6 +592,21 @@ function set_package_info() {
 	fi
 }
 
+function repack_deb_as_all() {
+  deb="$1"
+  tmp="$(mktemp -d)"
+  out="${deb%_amd64.deb}_all.deb"
+
+  dpkg-deb -R "$deb" "$tmp"
+  sed -i 's/^Architecture: .*/Architecture: all/' "$tmp/DEBIAN/control"
+  dpkg-deb -b "$tmp" "$out"
+
+  rm -rf "$tmp"
+  rm -f "$deb"
+
+  echo "$out"
+}
+
 file_list=()
 function download_release() {
 	version=${1:-latest}
@@ -912,9 +927,20 @@ export DEB_VERSION_UPSTREAM=$(dpkg-parsechangelog -SVersion | cut -d- -f1)
 echo "Building PDM packages..."
 dpkg-buildpackage -a${HOST_ARCH} -B -us -uc ${BUILD_PROFILES}
 
-echo "Downloading PDM packages..."
-download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-ui "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
-download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-docs "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
+echo "Downloading UI package..."
+ui_deb="$(download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-ui "${DEB_VERSION_UPSTREAM}" "${PACKAGES}")"
+
+if [ "$(dpkg-deb -f "$ui_deb" Architecture)" = "amd64" ]; then
+  ui_deb="$(repack_deb_as_all "$ui_deb")" || exit 1
+fi
+
+echo "Downloading docs package..."
+docs_deb="$(download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-docs "${DEB_VERSION_UPSTREAM}" "${PACKAGES}")"
+
+if [ ! -s "$ui_deb" ] || [ ! -s "$docs_deb" ]; then
+  echo "Failed to download packages!" >&2 && exit 1
+fi
+
 cd ..
 
 shopt -s nullglob
@@ -936,6 +962,7 @@ pdm_runtime_debs=(
   "${PACKAGES}/proxmox-datacenter-manager_${PROXMOX_DM_VER}_${HOST_ARCH}.deb"
   "${PACKAGES}/proxmox-datacenter-manager-client_${PROXMOX_DM_VER}_${HOST_ARCH}.deb"
 )
+
 download_runtime_arch_all_dependencies "${pdm_runtime_debs[@]}"
 
 [ "${BUILD_PACKAGE}" = "client" ] && exit 0

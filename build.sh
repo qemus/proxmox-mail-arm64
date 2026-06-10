@@ -722,14 +722,14 @@ if [ "${PACKAGE_ARCH}" != "${HOST_ARCH}" ]; then
   export DEB_BUILD_OPTIONS="${DEB_BUILD_OPTIONS:+${DEB_BUILD_OPTIONS} }nostrip"
 fi
 
-#${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
+${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
 
 export DEB_VERSION=$(dpkg-parsechangelog -SVersion)
 export DEB_VERSION_UPSTREAM=$(dpkg-parsechangelog -SVersion | cut -d- -f1)
 
 if [[ "${BUILD_PROFILES}" =~ cross ]]; then
   echo "Cross build: building only Architecture:any PDM packages"
-  #dpkg-buildpackage -a${HOST_ARCH} -B -us -uc ${BUILD_PROFILES}
+  dpkg-buildpackage -a${HOST_ARCH} -B -us -uc ${BUILD_PROFILES}
 
   echo "Cross build: downloading Architecture:all PDM packages (latest available <= requested)"
   download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-ui "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
@@ -816,8 +816,4 @@ else
 fi
 
 # Remove debug symbol packages from output directory.
-echo "Removing debug symbol packages from ${PACKAGES}"
 rm -f "${PACKAGES}"/*-dbgsym_*.deb "${PACKAGES}"/*.ddeb
-
-rm -f "${PACKAGES}"/*-dbgsym_*.deb
-rm -f "${PACKAGES}"/*.ddeb

@@ -944,10 +944,10 @@ ${SUDO} apt -y build-dep -a${HOST_ARCH} ${BUILD_PROFILES} .
 export DEB_VERSION=$(dpkg-parsechangelog -SVersion)
 export DEB_VERSION_UPSTREAM=$(dpkg-parsechangelog -SVersion | cut -d- -f1)
 
-echo "Building only Architecture:any PDM packages"
+echo "Building PDM packages..."
 dpkg-buildpackage -a${HOST_ARCH} -B -us -uc ${BUILD_PROFILES}
 
-echo "Downloading Architecture:all PDM packages (latest available <= requested)"
+echo "Downloading PDM packages..."
 download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-ui "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
 download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-docs "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
 cd ..

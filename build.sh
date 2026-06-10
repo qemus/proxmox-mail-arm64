@@ -182,6 +182,73 @@ function download_package_prefix_no_deps() {
 	echo "${file}"
 }
 
+
+function download_package_max_upstream_no_deps() {
+	repo=${1}
+	package_name=${2}
+	max_upstream_version=${3}
+	dest=${4}
+
+	url_base=http://download.proxmox.com/debian/${repo}
+	if [[ "${repo}" == "pdm" ]]; then
+		packages_target=${PACKAGES_PDM}
+	elif [[ "${repo}" == "devel" ]]; then
+		packages_target=${PACKAGES_DEVEL}
+	else
+		echo "Unknown repo ${repo}" >&2
+		return 1
+	fi
+
+	version_target=""
+	file_target=""
+	upstream_target=""
+
+	while IFS=';' read -r name version file depends; do
+		[[ "${name}" == "${package_name}" ]] || continue
+		[ -n "${version}" ] || continue
+
+		# Compare by upstream part, so a repository version like 1.1.2 is accepted
+		# when the requested source version is 1.1.4, but 1.1.5 is not.
+		upstream=${version%%-*}
+		if ! dpkg --compare-versions "${upstream}" le "${max_upstream_version}"; then
+			continue
+		fi
+
+		if [ -z "${version_target}" ] || dpkg --compare-versions "${version}" '>>' "${version_target}"; then
+			version_target=${version}
+			upstream_target=${upstream}
+			file_target=${file}
+		fi
+	done <<<"${packages_target}"
+
+	if [ -z "${file_target}" ]; then
+		echo "Error: package ${package_name} not found in ${repo} with upstream <= ${max_upstream_version}" >&2
+		echo "Available ${package_name} versions in ${repo}:" >&2
+		while IFS=';' read -r name version file depends; do
+			[[ "${name}" == "${package_name}" ]] && echo "  ${version}" >&2
+		done <<<"${packages_target}"
+		return 1
+	fi
+
+	if [ "${upstream_target}" != "${max_upstream_version}" ]; then
+		echo "Warning: using ${package_name} ${version_target}; requested source upstream is ${max_upstream_version}" >&2
+	else
+		echo "Using ${package_name} ${version_target}" >&2
+	fi
+
+	url=${url_base}/${file_target}
+	file="${dest}/${url##*/}"
+	if [ -e "${file}" ]; then
+		echo "${package_name} ${version_target} up-to-date" >&2
+		echo "${file}"
+		return 0
+	fi
+
+	echo "${package_name} ${version_target} downloading...${url}" >&2
+	curl -sSfL "${url}" -o "${file}"
+	echo "${file}"
+}
+
 function git_clone_or_fetch() {
 	url=${1}              # url/name.git
 	name_git=${url##*/}   # name.git
@@ -664,9 +731,9 @@ if [[ "${BUILD_PROFILES}" =~ cross ]]; then
   echo "Cross build: building only Architecture:any PDM packages"
   #dpkg-buildpackage -a${HOST_ARCH} -B -us -uc ${BUILD_PROFILES}
 
-  echo "Cross build: downloading Architecture:all PDM packages (prefix matcher v4)"
-  download_package_prefix_no_deps pdm proxmox-datacenter-manager-ui "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
-  download_package_prefix_no_deps pdm proxmox-datacenter-manager-docs "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
+  echo "Cross build: downloading Architecture:all PDM packages (latest available <= requested)"
+  download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-ui "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
+  download_package_max_upstream_no_deps pdm proxmox-datacenter-manager-docs "${DEB_VERSION_UPSTREAM}" "${PACKAGES}" >/dev/null
 else
   dpkg-buildpackage -a${HOST_ARCH} -b -us -uc ${BUILD_PROFILES}
 fi
@@ -751,3 +818,6 @@ fi
 # Remove debug symbol packages from output directory.
 echo "Removing debug symbol packages from ${PACKAGES}"
 rm -f "${PACKAGES}"/*-dbgsym_*.deb "${PACKAGES}"/*.ddeb
+
+rm -f "${PACKAGES}"/*-dbgsym_*.deb
+rm -f "${PACKAGES}"/*.ddeb

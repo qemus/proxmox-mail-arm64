@@ -35,6 +35,23 @@ function download_package() {
 	echo "${file}"
 }
 
+function get_base() {
+	local repo="$1"
+
+	if [[ "${repo}" == "pdm" ]]; then
+		echo "${PACKAGES_PDM}"
+	elif [[ "${repo}" == "devel" ]]; then
+		echo "${PACKAGES_DEVEL}"
+	elif [[ "${repo}" == "pve" ]]; then
+		echo "${PACKAGES_PVE}"
+	else
+		echo "Unknown repo ${repo}" >&2
+		exit 1
+	fi
+
+	return 0
+}
+
 function download_package_by_upstream_version() {
 	repo=${1}
 	package_name=${2}
@@ -42,17 +59,7 @@ function download_package_by_upstream_version() {
 	dest=${4}
 
 	url_base=http://download.proxmox.com/debian/${repo}
-	if [[ "${repo}" == "pdm" ]]; then
-		packages_target=${PACKAGES_PDM}
-	elif [[ "${repo}" == "devel" ]]; then
-		packages_target=${PACKAGES_DEVEL}
-	elif [[ "${repo}" == "pve" ]]; then
-		packages_target=${PACKAGES_PVE}
-	else
-		echo "Unknown repo ${repo}" >&2
-		return 1
-	fi
-
+	packages_target=$(get_base "${repo}")
 	version_target=0.0
 	file_target=
 
@@ -132,17 +139,7 @@ function download_package_prefix_no_deps() {
 	dest=${4}
 
 	url_base=http://download.proxmox.com/debian/${repo}
-	if [[ "${repo}" == "pdm" ]]; then
-		packages_target=${PACKAGES_PDM}
-	elif [[ "${repo}" == "devel" ]]; then
-		packages_target=${PACKAGES_DEVEL}
-	elif [[ "${repo}" == "pve" ]]; then
-		packages_target=${PACKAGES_PVE}
-	else
-		echo "Unknown repo ${repo}" >&2
-		return 1
-	fi
-
+	packages_target=$(get_base "${repo}")
 	version_target=""
 	file_target=""
 
@@ -190,17 +187,7 @@ function download_package_max_upstream_no_deps() {
 	dest=${4}
 
 	url_base=http://download.proxmox.com/debian/${repo}
-	if [[ "${repo}" == "pdm" ]]; then
-		packages_target=${PACKAGES_PDM}
-	elif [[ "${repo}" == "devel" ]]; then
-		packages_target=${PACKAGES_DEVEL}
-	elif [[ "${repo}" == "pve" ]]; then
-		packages_target=${PACKAGES_PVE}
-	else
-		echo "Unknown repo ${repo}" >&2
-		return 1
-	fi
-
+	packages_target=$(get_base "${repo}")
 	version_target=""
 	file_target=""
 	upstream_target=""
@@ -260,16 +247,7 @@ function download_arch_all_package_satisfying() {
 	dest=${5}
 
 	url_base=http://download.proxmox.com/debian/${repo}
-	if [[ "${repo}" == "pdm" ]]; then
-		packages_target=${PACKAGES_PDM}
-	elif [[ "${repo}" == "devel" ]]; then
-		packages_target=${PACKAGES_DEVEL}
-	elif [[ "${repo}" == "pve" ]]; then
-		packages_target=${PACKAGES_PVE}
-	else
-		return 1
-	fi
-
+	packages_target=$(get_base "${repo}")
 	version_target=""
 	file_target=""
 
@@ -411,17 +389,7 @@ function package_version_satisfying() {
 	relation=${3:-}
 	required_version=${4:-}
 
-	if [[ "${repo}" == "pdm" ]]; then
-		packages_target=${PACKAGES_PDM}
-	elif [[ "${repo}" == "devel" ]]; then
-		packages_target=${PACKAGES_DEVEL}
-	elif [[ "${repo}" == "pve" ]]; then
-		packages_target=${PACKAGES_PVE}
-	else
-		echo "Unknown repo ${repo}" >&2
-		return 1
-	fi
-
+	packages_target=$(get_base "${repo}")
 	version_target=""
 	while IFS=';' read -r name version file depends; do
 		[[ "${name}" == "${package_name}" ]] || continue
@@ -483,17 +451,7 @@ function latest_package_version() {
 	repo=${1}
 	package_name=${2}
 
-	if [[ "${repo}" == "pdm" ]]; then
-		packages_target=${PACKAGES_PDM}
-	elif [[ "${repo}" == "devel" ]]; then
-		packages_target=${PACKAGES_DEVEL}
-	elif [[ "${repo}" == "pve" ]]; then
-		packages_target=${PACKAGES_PVE}
-	else
-		echo "Unknown repo ${repo}" >&2
-		return 1
-	fi
-
+	packages_target=$(get_base "${repo}")
 	version_target=""
 	while IFS=';' read -r name version file depends; do
 		[[ "${name}" == "${package_name}" ]] || continue
@@ -697,18 +655,9 @@ function select_package() {
 	repo=${1}
 	package_name=${2}
 	version_test=("${3}" "${4}")
-	url_base=http://download.proxmox.com/debian/${repo}
-	if [[ "${repo}" == "pdm" ]]; then
-		packages_target=${PACKAGES_PDM}
-	elif [[ "${repo}" == "devel" ]]; then
-		packages_target=${PACKAGES_DEVEL}
-	elif [[ "${repo}" == "pve" ]]; then
-		packages_target=${PACKAGES_PVE}
-	else
-		echo "Unknown repo ${repo}" >&2
-		return 1
-	fi
 
+	url_base=http://download.proxmox.com/debian/${repo}
+	packages_target=$(get_base "${repo}")
 	version_target=0.0
 	file_target=
 

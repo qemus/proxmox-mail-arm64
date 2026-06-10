@@ -88,8 +88,7 @@ jobs:
           gh release create ${DEB_VERSION} \
             --title "v${DEB_VERSION}" \
             --notes-file .github/PREBUILD.md \
-            --draft \
-            --latest=false \
+            --latest=true \
             packages/*.deb
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

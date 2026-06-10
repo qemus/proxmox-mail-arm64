@@ -790,7 +790,7 @@ if [ ! -e "${PACKAGES}/proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.d
 	fi
 	BUILD_MODE=release make deb
 	cd ../..
-	mv -f proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb "${PACKAGES}"
+    mv -f ../proxmox-termproxy_${PROXMOX_TERMPROXY_VER}_${HOST_ARCH}.deb "${PACKAGES}"
 else
 	echo "proxmox-termproxy up-to-date"
 fi

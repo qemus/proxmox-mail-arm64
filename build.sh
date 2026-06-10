@@ -840,9 +840,6 @@ while [ "$#" -ge 1 ]; do
 		exit 0
 		;;
 	github*)
-	    if [[ "$1" =~ github=[0-9.-]+ ]]; then
-			PROXMOX_DM_VER="${1#github=}"
-		fi
 		GITHUB_ACTION="true"
 		;;
 	nocheck)

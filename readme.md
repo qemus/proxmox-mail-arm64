@@ -6,7 +6,7 @@ At least 4 GB are required for compiling. On devices with low memory, SWAP must 
 
 ## Download pre-built packages
 
-You can find unofficial Debian packages that are created with the build.sh script at https://github.com/qemus/proxmox-datacenter-arm64/releases.
+You can find unofficial Debian packages that are created with the build.sh script at [https://github.com/qemus/proxmox-datacenter-arm64/releases](https://github.com/qemus/proxmox-datacenter-arm64/releases).
 
 With the script you can also download all files of the latest release at once
 
@@ -44,7 +44,7 @@ source ~/.cargo/env
 ./build.sh
 ```
 
-The compilation can take several hours.  
+The compilation will take about 10 minutes.  
 After that you can find the finished packages in the folder `packages/`.
 
 ## Build using docker
@@ -67,7 +67,7 @@ Once the docker build is completed, packages will be copied from the docker buil
 
 ### Enable multi arch and install build essentials and dependencies
 
-For cross compiling you need to enable multiarch and install the needed build dependencies for the target architecture. The docs build runs ARM64 helper binaries during the build, so `qemu-user` and `qemu-user-binfmt` are needed.
+For cross compiling you need to enable multiarch and install the needed build dependencies for the target architecture. The
 
 ```bash
 dpkg --add-architecture arm64

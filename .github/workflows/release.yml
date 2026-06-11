@@ -26,9 +26,9 @@ jobs:
             [ -z "$latest_tag" ] || dpkg --compare-versions "$v" gt "$latest_tag"; } && latest_tag="$v"
           done < <(curl -fsSL http://download.proxmox.com/debian/pdm/dists/trixie/pdm-no-subscription/binary-amd64/Packages.gz | \
                    gzip -dc | awk '/^Package: proxmox-datacenter-manager$/ {f=1; next} f && /^Version:/ {print $2; f=0}')
-                   
-          echo "Found tag: \"${latest_tag}\""
+          
           latest_tag="${latest_tag%-*}"
+          echo "Found tag: \"${latest_tag}\""
           major="${latest_version%%.*}"
           minor="${latest_version#*.}"
           minor="${minor%%.*}"

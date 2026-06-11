@@ -852,6 +852,12 @@ patch -p1 -d proxmox-datacenter-manager/ <"${PATCHES}/proxmox-datacenter-manager
 # The nodoc build profile alone does not stop upstream make install from entering docs/.
 sed -i '/^[[:space:]]*$(MAKE) -C docs install[[:space:]]*$/d' proxmox-datacenter-manager/Makefile
 
+# Without docs install, the generated manpages are absent. They are shipped by
+# the downloaded docs package, so do not let dh_install expect them here.
+sed -i '\#usr/share/man/#d' \
+	proxmox-datacenter-manager/debian/proxmox-datacenter-manager.install \
+	proxmox-datacenter-manager/debian/proxmox-datacenter-manager-client.install
+
 if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 	# Add COMPILEDIR override for cross-compilation target in Makefile
 	sed -i '/^COMPILEDIR := target\/debug$/,/^endif$/{/^endif$/a \\nifdef CARGO_BUILD_TARGET\nCOMPILEDIR := target/$(CARGO_BUILD_TARGET)/$(if $(filter release,$(BUILD_MODE)),release,debug)\nendif

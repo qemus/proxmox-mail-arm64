@@ -711,6 +711,9 @@ while [ "$#" -ge 1 ]; do
 	esac
 	shift
 done
+
+# Docs are downloaded from the PDM repository below, so never build them locally.
+[[ ${BUILD_PROFILES} =~ nodoc ]] || BUILD_PROFILES=${BUILD_PROFILES}",nodoc"
 [ -n "${BUILD_PROFILES}" ] && BUILD_PROFILES="--build-profiles=${BUILD_PROFILES#,}"
 
 if [ ! -d "${PATCHES}" ]; then

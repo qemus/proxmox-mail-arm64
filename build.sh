@@ -848,6 +848,10 @@ sed -i '/\[patch.crates-io\]/a proxmox-rrd-api-types = { path = "../proxmox/prox
 patch -p1 -d proxmox-datacenter-manager/ <"${PATCHES}/proxmox-datacenter-manager-build.patch"
 patch -p1 -d proxmox-datacenter-manager/ <"${PATCHES}/proxmox-datacenter-manager-fido2-arm.patch"
 
+# Docs are downloaded from the PDM repository, so do not install/build docs locally.
+# The nodoc build profile alone does not stop upstream make install from entering docs/.
+sed -i '/^[[:space:]]*$(MAKE) -C docs install[[:space:]]*$/d' proxmox-datacenter-manager/Makefile
+
 if [[ "${BUILD_PROFILES}" =~ cross ]]; then
 	# Add COMPILEDIR override for cross-compilation target in Makefile
 	sed -i '/^COMPILEDIR := target\/debug$/,/^endif$/{/^endif$/a \\nifdef CARGO_BUILD_TARGET\nCOMPILEDIR := target/$(CARGO_BUILD_TARGET)/$(if $(filter release,$(BUILD_MODE)),release,debug)\nendif
@@ -925,8 +929,6 @@ mv -f "${artifacts[@]}" "${PACKAGES}"
 pdm_runtime_debs=(
   "${PACKAGES}/proxmox-datacenter-manager_${PROXMOX_DM_VER}_${HOST_ARCH}.deb"
   "${PACKAGES}/proxmox-datacenter-manager-client_${PROXMOX_DM_VER}_${HOST_ARCH}.deb"
-  "${ui_deb}"
-  "${docs_deb}"
 )
 
 for deb in "${pdm_runtime_debs[@]}"; do
@@ -936,7 +938,10 @@ for deb in "${pdm_runtime_debs[@]}"; do
 	fi
 done
 
-download_runtime_arch_all_dependencies "${pdm_runtime_debs[@]}"
+download_runtime_arch_all_dependencies \
+	"${pdm_runtime_debs[@]}" \
+	"${ui_deb}" \
+	"${docs_deb}"
 
 [ "${BUILD_PACKAGE}" = "client" ] && exit 0
 

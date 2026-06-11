@@ -624,6 +624,7 @@ HOST_SYSTEM=$(dpkg-architecture -q DEB_HOST_GNU_SYSTEM)
 BUILD_PACKAGE="server"
 BUILD_PROFILES=""
 GITHUB_ACTION=""
+packages_install=()
 
 export DEB_HOST_RUST_TYPE=${HOST_CPU}-unknown-${HOST_SYSTEM}
 
@@ -752,7 +753,9 @@ if [ "${BUILD_PACKAGE}" = "server" ]; then
 fi
 
 echo "Install build dependencies"
-${SUDO} apt install -y "${packages_install[@]}"
+if [ "${#packages_install[@]}" -gt 0 ]; then
+	${SUDO} apt install -y "${packages_install[@]}"
+fi
 
 cd "${SOURCES}"
 
@@ -922,7 +925,16 @@ mv -f "${artifacts[@]}" "${PACKAGES}"
 pdm_runtime_debs=(
   "${PACKAGES}/proxmox-datacenter-manager_${PROXMOX_DM_VER}_${HOST_ARCH}.deb"
   "${PACKAGES}/proxmox-datacenter-manager-client_${PROXMOX_DM_VER}_${HOST_ARCH}.deb"
+  "${ui_deb}"
+  "${docs_deb}"
 )
+
+for deb in "${pdm_runtime_debs[@]}"; do
+	if [ ! -e "${deb}" ]; then
+		echo "Error: missing runtime package ${deb}" >&2
+		exit 1
+	fi
+done
 
 download_runtime_arch_all_dependencies "${pdm_runtime_debs[@]}"
 
@@ -1014,7 +1026,7 @@ PROXMOX_JOURNALREADER_VER="$(cd proxmox-mini-journalreader && dpkg-parsechangelo
 echo "Using proxmox-mini-journalreader package version: ${PROXMOX_JOURNALREADER_VER}"
 
 if [ ! -e "${PACKAGES}/proxmox-mini-journalreader_${PROXMOX_JOURNALREADER_VER}_${HOST_ARCH}.deb" ]; then
-	patch -p1 -d proxmox-mini-journalreader/ <${PATCHES}/proxmox-mini-journalreader.patch
+	patch -p1 -d proxmox-mini-journalreader/ <"${PATCHES}/proxmox-mini-journalreader.patch"
 	[[ "${BUILD_PROFILES}" =~ cross ]] &&
 		patch -p1 -d proxmox-mini-journalreader/ <"${PATCHES}/proxmox-mini-journalreader-cross.patch"
 	cd proxmox-mini-journalreader/

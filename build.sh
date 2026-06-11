@@ -20,7 +20,7 @@ function download_package() {
 
 	if [ -z "${url}" ]; then
 		echo "Error package ${package} in version " "${version_test[@]}" " not found" >&2
-		return 1
+		exit 1
 	fi
 
 	file="${dest}/${url##*/}"
@@ -561,7 +561,7 @@ function download_release() {
 		fi
 
         [[ "$file" == *"dbgsym"* ]] && continue
-        [[ "$file" == "proxmox-datacenter-manager-client"* ]] && continue
+        [[ "$file" == "proxmox-datacenter-manager-meta"* ]] && continue
 
 		file_list+=("${PACKAGES}/${file}")
 	done

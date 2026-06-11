@@ -318,7 +318,6 @@ function resolve_commit_for_package_version() {
 	return 1
 }
 
-
 function latest_package_version() {
 	repo=${1}
 	package_name=${2}
@@ -349,29 +348,14 @@ function resolve_commit_for_debian_version() {
 	version=${1}
 	repo_path=${2}
 	package_name=${3:-}
-	upstream=${version%%-*}
 
-	for tag in $(git -C "${repo_path}" tag -l "*${version}*" 2>/dev/null; git -C "${repo_path}" tag -l "*${upstream}*" 2>/dev/null); do
-		commit=$(git -C "${repo_path}" rev-list -n1 "${tag}" 2>/dev/null || true)
-		if [ -n "${commit}" ]; then
-			echo "${commit}"
-			return 0
-		fi
-	done
-
+	# Compatibility wrapper. The generic package resolver handles tags,
+	# root changelogs, and nested */debian/changelog files.
 	if [ -n "${package_name}" ]; then
-		commit=$(git -C "${repo_path}" log --all --format="%H" -1 -S "${package_name} (${version}" -- debian/changelog 2>/dev/null || true)
-		[ -n "${commit}" ] && { echo "${commit}"; return 0; }
-		commit=$(git -C "${repo_path}" log --all --format="%H" -1 -S "${package_name} (${upstream}" -- debian/changelog 2>/dev/null || true)
-		[ -n "${commit}" ] && { echo "${commit}"; return 0; }
+		resolve_commit_for_package_version "${version}" "${repo_path}" "${package_name}"
+	else
+		resolve_commit_for_package_version "${version}" "${repo_path}" ""
 	fi
-
-	commit=$(git -C "${repo_path}" log --all --format="%H" -1 --grep="bump version to ${version}" -- debian/changelog 2>/dev/null || true)
-	[ -n "${commit}" ] && { echo "${commit}"; return 0; }
-	commit=$(git -C "${repo_path}" log --all --format="%H" -1 --grep="bump version to ${upstream}" -- debian/changelog 2>/dev/null || true)
-	[ -n "${commit}" ] && { echo "${commit}"; return 0; }
-
-	return 1
 }
 
 function git_clone_or_fetch() {
@@ -397,71 +381,6 @@ function git_clean_and_checkout() {
 	git "${path_args[@]}" clean -ffdx
 	git "${path_args[@]}" reset --hard
 	git "${path_args[@]}" checkout "${commit_id}"
-}
-
-resolve_commit() {
-    local version=$1
-    local repo_path=$2
-    local package_name=$3
-
-    local version_stripped=${version%%-*}
-    local commit
-
-    # Tags
-    for tag in $(git -C "${repo_path}" tag -l "*${version_stripped}*" 2>/dev/null); do
-        commit=$(git -C "${repo_path}" rev-list -n1 "${tag}" 2>/dev/null)
-        [ -n "${commit}" ] && echo "${commit}" && return 0
-    done
-
-    # Common Proxmox bump commit pattern
-    commit=$(
-        git -C "${repo_path}" log \
-            --all \
-            --format="%H" \
-            -1 \
-            --grep="bump version to ${version_stripped}" \
-            -- debian/changelog 2>/dev/null
-    )
-
-    [ -n "${commit}" ] && echo "${commit}" && return 0
-
-    # Changelog entry search
-    commit=$(
-        git -C "${repo_path}" log \
-            --all \
-            --format="%H" \
-            -1 \
-            -S "${package_name} (${version_stripped}" \
-            -- debian/changelog 2>/dev/null
-    )
-
-    [ -n "${commit}" ] && echo "${commit}" && return 0
-
-    commit=$(
-        git -C "${repo_path}" log \
-            --all \
-            --format="%H" \
-            -1 \
-            --grep="${package_name} (${version}" \
-            -- debian/changelog 2>/dev/null
-    )
-
-    [ -n "${commit}" ] && echo "${commit}" && return 0
-
-    if [ "${version_stripped}" != "${version}" ]; then
-        commit=$(
-            git -C "${repo_path}" log \
-                --all \
-                --format="%H" \
-                -1 \
-                --grep="${package_name} (${version_stripped}" \
-                -- debian/changelog 2>/dev/null
-        )
-
-        [ -n "${commit}" ] && echo "${commit}" && return 0
-    fi
-
-    return 1
 }
 
 resolve_dependency_repo_commit() {
@@ -550,8 +469,8 @@ function select_package() {
 	repo=${1}
 	package_name=${2}
 	version_test=("${3}" "${4}")
-
 	url_base=http://download.proxmox.com/debian/${repo}
+
 	packages_target=$(get_base "${repo}")
 	version_target=0.0
 	file_target=

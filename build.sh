@@ -561,9 +561,10 @@ function repack_deb_as_all() {
 }
 
 function is_container() {
-    [ -f /.dockerenv ] ||
-    [ -f /run/.containerenv ] ||
-    grep -qaE '(docker|containerd|kubepods|libpod)' /proc/1/cgroup 2>/dev/null
+	[ -f /.dockerenv ] ||
+	[ -f /run/.containerenv ] ||
+	[ -e /dev/.buildkit_qemu_emulator ] ||
+	grep -qaE '(docker|containerd|kubepods|libpod|buildkit)' /proc/1/cgroup 2>/dev/null
 }
 
 file_list=()

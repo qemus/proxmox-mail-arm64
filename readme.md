@@ -1,12 +1,12 @@
 # proxmox-datacenter-manager-arm64
 
-Script for building Proxmox Datacenter Manager **1.x** for **Debian/Trixie**
+Script for building Proxmox Datacenter Manager **1.x** for ARM64.
 
 At least 4 GB are required for compiling. On devices with low memory, SWAP must be used (see help section).
 
 ## Download pre-built packages
 
-You can find unofficial debian packages for **Debian/Trixie** that are created with the build.sh script and github actions at https://github.com/qemus/proxmox-datacenter-arm64/releases.
+You can find unofficial Debian packages that are created with the build.sh script at https://github.com/qemus/proxmox-datacenter-arm64/releases.
 
 With the script you can also download all files of the latest release at once
 
@@ -49,7 +49,7 @@ After that you can find the finished packages in the folder `packages/`.
 
 ## Build using docker
 
-You can build arm64 `.deb` packages using the provided Dockerfile and docker buildx:
+You can build ARM64 `.deb` packages using the provided Dockerfile and docker buildx:
 
 ```bash
 docker buildx build -o packages --platform linux/arm64 .
@@ -67,7 +67,7 @@ Once the docker build is completed, packages will be copied from the docker buil
 
 ### Enable multi arch and install build essentials and dependencies
 
-For cross compiling you need to enable multiarch and install the needed build dependencies for the target architecture. The docs build runs arm64 helper binaries during the build, so `qemu-user` and `qemu-user-binfmt` are needed.
+For cross compiling you need to enable multiarch and install the needed build dependencies for the target architecture. The docs build runs ARM64 helper binaries during the build, so `qemu-user` and `qemu-user-binfmt` are needed.
 
 ```bash
 dpkg --add-architecture arm64

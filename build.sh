@@ -703,6 +703,7 @@ if [ "${BUILD_PACKAGE}" = "server" ]; then
 	# Build/runtime helper packages are selected dynamically from the loaded
 	# repository metadata, instead of pinning minimum versions in this script.
 	download_package_latest pdm pdm-i18n "${PACKAGES}" >/dev/null || true
+	download_runtime_arch_all_dependency proxmox-geojson-data "" "" "${PACKAGES}" >/dev/null || true
 	libjs_extjs="$(download_package_latest pdm libjs-extjs "${PACKAGES}")"
  	proxmox_widget_toolkit="$(download_package_latest pdm proxmox-widget-toolkit "${PACKAGES}")"
 	download_package_latest pdm libproxmox-acme-plugins "${PACKAGES}" >/dev/null || true

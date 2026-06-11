@@ -8,15 +8,15 @@ At least 4 GB are required for compiling. On devices with low memory, SWAP must 
 
 You can find unofficial Debian packages that are created with the build.sh script at [https://github.com/qemus/proxmox-datacenter-arm64/releases](https://github.com/qemus/proxmox-datacenter-arm64/releases).
 
-With the script you can also download all files of the latest release at once
+With the script you can also download or install all packages of the latest release automatically.
 
 **Download and install**
 
-`./build.sh install` or a specific version `./build.sh install=1.1.4-1`
+`./build.sh install` or a specific version `./build.sh install=1.1.4`
 
 **Download only**
 
-`./build.sh download` or a specific version `./build.sh download=1.1.4-1`
+`./build.sh download` or a specific version `./build.sh download=1.1.4`
 
 ## Build manually
 
@@ -100,11 +100,7 @@ rustup target add aarch64-unknown-linux-gnu
 ## Install packages
 
 ```bash
-sudo apt install \
-	./libjs-extjs_*_all.deb \
-	./libproxmox-acme-plugins_*_all.deb \
-    ./proxmox-widget-toolkit_*_all.deb \
-	./proxmox-datacenter-manager_*_arm64.deb
+sudo apt install ./*.deb
 ```
 
 ## Help section

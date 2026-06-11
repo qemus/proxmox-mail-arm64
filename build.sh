@@ -219,7 +219,7 @@ function download_runtime_arch_all_dependencies() {
 		return 0
 	fi
 
-	echo "Resolving Architecture:all runtime dependencies recursively from package metadata"
+	echo "Resolving runtime dependencies recursively from package metadata"
 
 	local queue=() seen=() deb dep package_name relation required_version downloaded_file key already_seen
 

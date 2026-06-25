@@ -142,6 +142,9 @@ sudo sed -i "s#.*CONF_\(SWAPSIZE\|MAXSWAP\)=.*#CONF_\1=4096#" /etc/dphys-swapfil
 sudo service dphys-swapfile restart
 ```
 
+## Stars 🌟
+[![Stargazers](https://raw.githubusercontent.com/star-stats/stars/refs/heads/data/charts/qemus-proxmox-datacenter-arm64.svg)](https://github.com/dobtc/qemus/proxmox-datacenter-arm64)
+
 ## Acknowledgements
 
 Special thanks to [wofferl](https://github.com/wofferl), this project would not exist without his invaluable work.

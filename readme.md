@@ -143,7 +143,7 @@ sudo service dphys-swapfile restart
 ```
 
 ## Stars 🌟
-[![Stargazers](https://raw.githubusercontent.com/star-stats/stars/refs/heads/data/charts/qemus-proxmox-datacenter-arm64.svg)](https://github.com/dobtc/qemus/proxmox-datacenter-arm64)
+[![Stargazers](https://raw.githubusercontent.com/star-stats/stars/refs/heads/data/charts/qemus-proxmox-datacenter-arm64.svg)](https://github.com/qemus/proxmox-datacenter-arm64/stargazers)
 
 ## Acknowledgements
 

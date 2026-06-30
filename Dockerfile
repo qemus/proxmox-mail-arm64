@@ -26,6 +26,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+RUN echo "deb http://download.proxmox.com/debian/devel trixie main" \
+	> /etc/apt/sources.list.d/proxmox-devel.list && \
+	apt-get update
 
 COPY . /build/
 WORKDIR /build

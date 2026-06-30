@@ -235,7 +235,7 @@ function build_dpkg_package() {
 registry = "https://github.com/rust-lang/crates.io-index"
 EOF
 
-        PROXMOX_TIME_PATH="$(find ../proxmox -maxdepth 4 -path '*/proxmox-time/Cargo.toml' -print -quit)"
+        PROXMOX_TIME_PATH="$(find ./proxmox -maxdepth 4 -path '*/proxmox-time/Cargo.toml' -print -quit)"
         PROXMOX_TIME_PATH="${PROXMOX_TIME_PATH%/Cargo.toml}"
 
         if [ -z "${PROXMOX_TIME_PATH}" ]; then

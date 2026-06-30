@@ -223,6 +223,8 @@ function build_dpkg_package() {
     set_package_info
 
     if [ "${repo_name}" = "pmg-log-tracker" ]; then
+        git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
+
         sed -i '/librust-/d' debian/control
 
         rm -f .cargo/config .cargo/config.toml
@@ -231,6 +233,12 @@ function build_dpkg_package() {
         cat > .cargo/config.toml <<'EOF'
 [source.crates-io]
 registry = "https://github.com/rust-lang/crates.io-index"
+EOF
+
+        cat >> Cargo.toml <<'EOF'
+
+[patch.crates-io]
+proxmox-time = { path = "../proxmox/proxmox-time" }
 EOF
 
         cat > debian/rules <<'EOF'

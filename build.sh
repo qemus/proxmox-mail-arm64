@@ -197,6 +197,14 @@ function build_make_deb_package() {
 	cd ..
 }
 
+function use_repo_rust_toolchain() {
+	if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
+		rustup show >/dev/null
+	else
+		echo "No rust-toolchain file found, using default rustup toolchain"
+	fi
+}
+
 function build_dpkg_package() {
 	repo_url=${1}
 	repo_name=${2}
@@ -214,8 +222,17 @@ function build_dpkg_package() {
 
 	set_package_info
 
-    ${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
-    dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
+	if command -v rustup >/dev/null 2>&1; then
+		if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
+			rustup show >/dev/null
+		else
+			echo "No rust-toolchain file found, using default rustup toolchain"
+		fi
+	fi
+
+	${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
+
+	dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
 
 	cd ..
 

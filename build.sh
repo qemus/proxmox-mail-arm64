@@ -214,7 +214,15 @@ function build_dpkg_package() {
 
 	set_package_info
 
-	${SUDO} apt-get -y build-dep -a"${PACKAGE_ARCH}" ${BUILD_PROFILES} .
+    ${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
+
+    if [ "${PACKAGE_ARCH}" = "arm64" ]; then
+    	export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=/usr/bin/aarch64-linux-gnu-gcc
+    	export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER=qemu-aarch64
+    	export CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu
+    	export TARGET=aarch64-unknown-linux-gnu
+    	export CC_aarch64_unknown_linux_gnu=/usr/bin/aarch64-linux-gnu-gcc
+    fi
 
 	dpkg-buildpackage -a"${PACKAGE_ARCH}" -b -us -uc ${BUILD_PROFILES}
 
@@ -223,20 +231,87 @@ function build_dpkg_package() {
 	mv -f ./*.deb "${PACKAGES}/"
 }
 
-SUDO="${SUDO:-sudo -E}"
+function is_container() {
+	[ -f /.dockerenv ] ||
+	[ -f /run/.containerenv ] ||
+	[ -e /dev/.buildkit_qemu_emulator ] ||
+	grep -qaE '(docker|containerd|kubepods|libpod|buildkit)' /proc/1/cgroup 2>/dev/null
+}
 
+file_list=()
+function download_release() {
+	version=${1:-latest}
+	release_url="https://api.github.com/repos/qemus/proxmox-mail-arm64/releases/${version}"
+
+	echo "Downloading ${version} released files to ${PACKAGES}"
+
+	mapfile -t download_urls < <(
+		curl -sSfL "${release_url}" |
+			jq -r '
+				.assets[]
+				| select(.name | test("static|dbgsym") | not)
+				| .browser_download_url
+			'
+	)
+
+	if [ "${#download_urls[@]}" -eq 0 ]; then
+		echo "Error: no release assets found for ${version}" >&2
+		return 1
+	fi
+
+	for download_url in "${download_urls[@]}"; do
+
+		file=$(basename "${download_url}")
+		
+		if [ -e "${PACKAGES}/${file}" ]; then
+			echo "${file} already exists"
+		else
+			echo "Downloading ${file}"
+			curl -sSfL "${download_url}" -o "${PACKAGES}/${file}"
+		fi
+
+        [[ "$file" == *"dbgsym"* ]] && rm "${PACKAGES}/${file}" && continue
+
+        if is_container; then
+            [[ "$file" == "proxmox-kernel-"* ]] && rm "${PACKAGES}/${file}" && continue
+	    	[[ "$file" == "proxmox-kernel-helper"* ]] && rm "${PACKAGES}/${file}" && continue
+		    [[ "$file" == "proxmox-default-kernel"* ]] && rm "${PACKAGES}/${file}" && continue
+		    [[ "$file" == "proxmox-mailgateway-meta"* ]] && rm "${PACKAGES}/${file}" && continue
+		fi
+
+		file_list+=("${PACKAGES}/${file}")
+	done
+}
+
+function install_server() {
+	if [ "${#file_list[@]}" -eq 0 ]; then
+		echo "Error: no files found to install" >&2
+		return 1
+	fi
+
+	if ${SUDO} apt-get install -y "${file_list[@]}"; then
+		rm -f -- "${file_list[@]}"
+	fi
+}
+
+SUDO="${SUDO:-sudo -E}"
 SCRIPT=$(realpath "${0}")
 BASE=$(dirname "${SCRIPT}")
 PACKAGES="${BASE}/packages"
-SOURCES="${BASE}/sources"
+PACKAGES_BUILD="${BASE}/packages_build"
 PATCHES="${BASE}/patches"
+SOURCES="${BASE}/sources"
 LOGFILE="build.log"
-
-PACKAGE_ARCH=$(dpkg-architecture -qDEB_BUILD_ARCH)
-
+PACKAGE_ARCH=$(dpkg-architecture -q DEB_BUILD_ARCH)
+HOST_ARCH=$(dpkg-architecture -q DEB_HOST_ARCH)
+HOST_CPU=$(dpkg-architecture -q DEB_HOST_GNU_CPU)
+HOST_SYSTEM=$(dpkg-architecture -q DEB_HOST_GNU_SYSTEM)
+BUILD_PACKAGE="server"
 BUILD_PROFILES=""
 GITHUB_ACTION=""
 PMG_VERSION="${PMG_VERSION:-9.1}"
+
+export DEB_HOST_RUST_TYPE=${HOST_CPU}-unknown-${HOST_SYSTEM}
 
 . /etc/os-release
 
@@ -245,8 +320,28 @@ PMG_VERSION="${PMG_VERSION:-9.1}"
 
 while [ "$#" -ge 1 ]; do
 	case "$1" in
+
 	version=*)
 		PMG_VERSION="${1#*=}"
+		;;
+
+    install*)
+		if [[ "$1" =~ install=[0-9.-]+ ]]; then
+			download_release tags/${1/*=/}
+		else
+			download_release
+		fi
+		install_server
+		exit 0
+		;;
+
+	download*)
+		if [[ "$1" =~ download=[0-9.-]+ ]]; then
+			download_release tags/${1/*=/}
+		else
+			download_release
+		fi
+		exit 0
 		;;
 
 	github=*)

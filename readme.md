@@ -14,11 +14,11 @@ With the script you can also download or install all packages of the latest rele
 
 **Download and install**
 
-`./build.sh install` or a specific version `./build.sh install=1.1.4`
+`./build.sh install` or a specific version `./build.sh install=9.1`
 
 **Download only**
 
-`./build.sh download` or a specific version `./build.sh download=1.1.4`
+`./build.sh download` or a specific version `./build.sh download=9.1`
 
 ## Build manually
 
@@ -64,34 +64,6 @@ docker buildx build -o packages --build-arg buildoptions="debug" --build-arg bas
 ```
 
 Once the Docker build is completed, packages will be copied from the docker build image to a folder named `packages` in the root folder.
-
-## Build using cross compiler
-
-### Enable multi arch and install build essentials and dependencies
-
-For cross compiling you need to enable multiarch and install the needed build dependencies for the target architecture. The
-
-```bash
-dpkg --add-architecture arm64
-```
-
-```bash
-apt update && apt-get install -y --no-install-recommends \
-	build-essential crossbuild-essential-arm64 curl ca-certificates sudo git lintian jq rsync \
-	pkg-config pkgconf:arm64 libudev-dev:arm64 libssl-dev:arm64 libapt-pkg-dev:arm64 \
-	libclang-dev libpam0g-dev:arm64 libcrypt-dev:arm64 libsystemd-dev:arm64 \
-	libacl1-dev:arm64 uuid-dev:arm64 libfuse3-dev:arm64 libldap2-dev:arm64 \
-	libzstd-dev:arm64 zlib1g-dev:arm64 nettle-dev:arm64 \
-	qemu-user qemu-user-binfmt patchelf
-```
-
-### Install `rustup` and add target arch
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -sSf | sh -s
-source ~/.cargo/env
-rustup target add aarch64-unknown-linux-gnu
-```
 
 ### Start build script
 

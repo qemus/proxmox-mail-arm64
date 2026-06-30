@@ -64,8 +64,10 @@ Once the Docker build is completed, packages will be copied from the docker buil
 
 ## Install packages
 
+Install all generated packages:
+
 ```bash
-sudo apt install ./*.deb
+sudo apt install ./packages/*.deb
 ```
 
 ## Help section

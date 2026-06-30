@@ -224,6 +224,9 @@ function build_dpkg_package() {
 
     if [ "${repo_name}" = "pmg-log-tracker" ]; then
     	sed -i '/librust-/d' debian/control
+	
+        mkdir -p debian
+	    echo '{"package":"0000000000000000000000000000000000000000000000000000000000000000","files":{}}' > debian/cargo-checksum.json
 
     	if command -v rustup >/dev/null 2>&1; then
 	    	export PATH="$HOME/.cargo/bin:$PATH"

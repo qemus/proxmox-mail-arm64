@@ -478,15 +478,15 @@ PROXMOX_SPAMASSASSIN_VERSION=$(package_version proxmox-spamassassin amd64)
 
 echo "Build pmg-log-tracker ${PMG_LOG_TRACKER_VERSION}"
 build_dpkg_package \
-	https://git.proxmox.com/git/pmg-log-tracker.git \
-	pmg-log-tracker \
-	"${PMG_LOG_TRACKER_VERSION}"
+    https://git.proxmox.com/git/pmg-log-tracker.git \
+    pmg-log-tracker \
+    "${PMG_LOG_TRACKER_VERSION}"
 
 echo "Build proxmox-spamassassin ${PROXMOX_SPAMASSASSIN_VERSION}"
-build_dpkg_package \
-	https://git.proxmox.com/git/proxmox-spamassassin.git \
-	proxmox-spamassassin \
-	"${PROXMOX_SPAMASSASSIN_VERSION}"
+build_make_deb_package \
+    https://git.proxmox.com/git/proxmox-spamassassin.git \
+    proxmox-spamassassin \
+    "${PROXMOX_SPAMASSASSIN_VERSION}"
 
 echo
 echo "Built/downloaded packages:"

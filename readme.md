@@ -22,15 +22,12 @@ With the script you can also download or install all packages of the latest rele
 
 ## Build manually
 
-### Install build essentials and dependencies
+### Install build prerequisites
 
 ```bash
 apt-get install -y --no-install-recommends \
-	build-essential curl ca-certificates sudo git lintian fakeroot jq rsync \
-	pkg-config libudev-dev libssl-dev libapt-pkg-dev libclang-dev \
-	libpam0g-dev libcrypt-dev libacl1-dev libsystemd-dev \
-	libfuse3-dev libldap2-dev libzstd-dev \
-	zlib1g-dev nettle-dev uuid-dev
+    build-essential ca-certificates curl \
+    git jq lintian sudo
 ```
 
 ### Install `rustup`
@@ -51,7 +48,7 @@ After that you can find the finished packages in the folder `packages/`.
 
 ## Build using Docker
 
-You can build ARM64 `.deb` packages using the provided Dockerfile and docker buildx:
+You can build the `.deb` packages using the provided Dockerfile and docker buildx:
 
 ```bash
 docker buildx build -o packages --platform linux/arm64 .
@@ -64,12 +61,6 @@ docker buildx build -o packages --build-arg buildoptions="debug" --build-arg bas
 ```
 
 Once the Docker build is completed, packages will be copied from the docker build image to a folder named `packages` in the root folder.
-
-### Start build script
-
-```bash
-./build.sh cross
-```
 
 ## Install packages
 

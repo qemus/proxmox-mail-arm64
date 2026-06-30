@@ -82,9 +82,10 @@ while [ "$#" -ge 1 ]; do
 		export DEB_BUILD_OPTIONS="nocheck"
 		;;
 
-	github)
-		GITHUB_ACTION="true"
-		;;
+    github=*)
+    	GITHUB_ACTION="true"
+    	PMG_VERSION="${1#*=}"
+	    ;;
 
 	debug)
 		exec &> >(tee "${LOGFILE}")

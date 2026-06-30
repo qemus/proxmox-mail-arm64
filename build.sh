@@ -223,24 +223,38 @@ function build_dpkg_package() {
     set_package_info
 
     if [ "${repo_name}" = "pmg-log-tracker" ]; then
-    	sed -i '/librust-/d' debian/control
-		sed -i '/override_dh_auto_test:/,/^[^[:space:]]/c\override_dh_auto_test:\n\ttrue' debian/rules
+        sed -i '/librust-/d' debian/control
 
-        mkdir -p /usr/share/cargo/registry
-	    echo '{"package":"0000000000000000000000000000000000000000000000000000000000000000","files":{}}' > debian/cargo-checksum.json
+        cat > debian/rules <<'EOF'
+#!/usr/bin/make -f
 
-    	if command -v rustup >/dev/null 2>&1; then
-	    	export PATH="$HOME/.cargo/bin:$PATH"
+%:
+	dh $@
 
-	    	if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
-		    	rustup show >/dev/null
-		    else
-		    	echo "No rust-toolchain file found, using default rustup toolchain"
-			    export RUSTUP_TOOLCHAIN=stable
-		    	rustup default stable
-	    	fi
-    	fi
-     fi
+override_dh_auto_build:
+	cargo build --release --locked
+
+override_dh_auto_test:
+	true
+
+override_dh_auto_install:
+	install -Dm755 target/release/pmg-log-tracker debian/pmg-log-tracker/usr/bin/pmg-log-tracker
+EOF
+
+        chmod +x debian/rules
+
+        if command -v rustup >/dev/null 2>&1; then
+            export PATH="$HOME/.cargo/bin:$PATH"
+
+            if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
+                rustup show >/dev/null
+            else
+                echo "No rust-toolchain file found, using default rustup toolchain"
+                export RUSTUP_TOOLCHAIN=stable
+                rustup default stable
+            fi
+        fi
+    fi
 
     ${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
     dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}

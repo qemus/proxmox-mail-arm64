@@ -218,21 +218,25 @@ function build_dpkg_package() {
 	git_clone_or_fetch "${repo_url}"
 	git_checkout_version "${repo_name}" "${version}"
 
-	cd "${repo_name}"
+    cd "${repo_name}"
 
-	set_package_info
+    set_package_info
 
-	if command -v rustup >/dev/null 2>&1; then
-		if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
-			rustup show >/dev/null
-		else
-			echo "No rust-toolchain file found, using default rustup toolchain"
-		fi
-	fi
+    if [ "${repo_name}" = "pmg-log-tracker" ]; then
+        sed -i '/librust-/d' debian/control
+    fi
 
-	${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
+    if command -v rustup >/dev/null 2>&1; then
+	    if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
+		    rustup show >/dev/null
+	    else
+		    echo "No rust-toolchain file found, using default rustup toolchain"
+	    fi
+    fi
 
-	dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
+    ${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
+
+    dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
 
 	cd ..
 

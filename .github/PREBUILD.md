@@ -1,3 +1,3 @@
-_These are unofficial binary packages of Proxmox Datacenter Manager for ARM64_
+_These are unofficial binary packages of Proxmox Mail Gateway for ARM64_
 
 **Official Changelog**

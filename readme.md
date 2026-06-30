@@ -6,8 +6,6 @@
 
 Script for building Proxmox Datacenter Manager **1.x** for ARM64.
 
-At least 4 GB are required for compiling. On devices with low memory, SWAP must be used (see help section).
-
 ## Download pre-built packages
 
 You can find unofficial Debian packages that are created with the build.sh script at [https://github.com/qemus/proxmox-datacenter-arm64/releases](https://github.com/qemus/proxmox-datacenter-arm64/releases).
@@ -51,7 +49,7 @@ source ~/.cargo/env
 The compilation will take about 10 minutes.  
 After that you can find the finished packages in the folder `packages/`.
 
-## Build using docker
+## Build using Docker
 
 You can build ARM64 `.deb` packages using the provided Dockerfile and docker buildx:
 
@@ -115,35 +113,6 @@ You can add the debug option to redirect the complete build process output also 
 
 ```bash
 ./build.sh debug
-```
-
-### Create SWAP
-
-At least 4 GB swap is recommended on low memory systems like Raspberry Pi.
-
-Source: https://askubuntu.com/questions/178712/how-to-increase-swap-space/1263160#1263160
-
-Check swap memory:
-
-```bash
-swapon --show
-free -h
-```
-
-Change swapsize on systems with fstab enabled swap:
-
-```bash
-sudo swapoff /var/swap
-sudo fallocate -l 4G /var/swap
-sudo mkswap /var/swap
-sudo swapon /var/swap
-```
-
-Change swapsize on systems with dphys-swapfile service:
-
-```bash
-sudo sed -i "s#.*CONF_\(SWAPSIZE\|MAXSWAP\)=.*#CONF_\1=4096#" /etc/dphys-swapfile
-sudo service dphys-swapfile restart
 ```
 
 ## Stars 🌟

@@ -63,7 +63,7 @@ You can also set build arguments for base image and build.sh options:
 docker buildx build -o packages --build-arg buildoptions="debug" --build-arg baseimage=debian:trixie-slim --platform linux/arm64 .
 ```
 
-Once the docker build is completed, packages will be copied from the docker build image to a folder named `packages` in the root folder.
+Once the Docker build is completed, packages will be copied from the docker build image to a folder named `packages` in the root folder.
 
 ## Build using cross compiler
 

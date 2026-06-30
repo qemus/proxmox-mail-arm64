@@ -256,7 +256,7 @@ EOF
 	dh $@
 
 override_dh_auto_build:
-	cargo build --release --locked
+	cargo build --release
 
 override_dh_auto_test:
 	true

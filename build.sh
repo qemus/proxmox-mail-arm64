@@ -225,6 +225,14 @@ function build_dpkg_package() {
     if [ "${repo_name}" = "pmg-log-tracker" ]; then
         sed -i '/librust-/d' debian/control
 
+        rm -f .cargo/config .cargo/config.toml
+
+        mkdir -p .cargo
+        cat > .cargo/config.toml <<'EOF'
+[source.crates-io]
+registry = "https://github.com/rust-lang/crates.io-index"
+EOF
+
         cat > debian/rules <<'EOF'
 #!/usr/bin/make -f
 

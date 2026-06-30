@@ -245,9 +245,6 @@ EOF
 override_dh_auto_build:
 	cargo build --release
 
-override_dh_auto_test:
-	true
-
 override_dh_auto_install:
 	install -Dm755 target/release/pmg-log-tracker debian/pmg-log-tracker/usr/bin/pmg-log-tracker
 EOF

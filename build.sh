@@ -171,32 +171,6 @@ function download_package() {
 	curl -sSfL "${url}" -o "${file}"
 }
 
-function build_make_deb_package() {
-	repo_url=${1}
-	repo_name=${2}
-	version=${3}
-
-	if compgen -G "${PACKAGES}/${repo_name}_${version}_*.deb" >/dev/null; then
-		echo "${repo_name} up-to-date"
-		return 0
-	fi
-
-	git_clone_or_fetch "${repo_url}"
-	git_checkout_version "${repo_name}" "${version}"
-
-	cd "${repo_name}"
-
-	set_package_info
-
-	${SUDO} apt-get -y build-dep .
-
-	make deb
-
-	mv -f ./*.deb "${PACKAGES}/"
-
-	cd ..
-}
-
 function use_repo_rust_toolchain() {
 	if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
 		rustup show >/dev/null
@@ -280,6 +254,33 @@ function prepare_package() {
             prepare_proxmox_spamassassin
             ;;
     esac
+}
+
+function build_make_deb_package() {
+	repo_url=${1}
+	repo_name=${2}
+	version=${3}
+
+	if compgen -G "${PACKAGES}/${repo_name}_${version}_*.deb" >/dev/null; then
+		echo "${repo_name} up-to-date"
+		return 0
+	fi
+
+	git_clone_or_fetch "${repo_url}"
+	git_checkout_version "${repo_name}" "${version}"
+
+	cd "${repo_name}"
+
+	set_package_info
+	prepare_package "${repo_name}"
+
+	${SUDO} apt-get -y build-dep .
+
+	make deb
+
+	mv -f ./*.deb "${PACKAGES}/"
+
+	cd ..
 }
 
 function build_dpkg_package() {

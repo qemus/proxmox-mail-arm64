@@ -267,12 +267,20 @@ EOF
     fi
 }
 
+function prepare_proxmox_spamassassin() {
+    sed -i "s/_amd64\.deb/_${PACKAGE_ARCH}.deb/g" Makefile
+}
+
 function prepare_package() {
     repo_name=${1}
 
     case "${repo_name}" in
         pmg-log-tracker)
             prepare_pmg_log_tracker
+            ;;
+
+        proxmox-spamassassin)
+            prepare_proxmox_spamassassin
             ;;
     esac
 }
@@ -447,6 +455,9 @@ while [ "$#" -ge 1 ]; do
 done
 
 [ -n "${BUILD_PROFILES}" ] && BUILD_PROFILES="--build-profiles=${BUILD_PROFILES#,}"
+if [[ ! " ${DEB_BUILD_OPTIONS:-} " =~ " nocheck " ]]; then
+    export DEB_BUILD_OPTIONS="${DEB_BUILD_OPTIONS:+${DEB_BUILD_OPTIONS} }nocheck"
+fi
 
 echo "Download package list from PMG repository"
 PACKAGES_PMG=$(load_packages http://download.proxmox.com/debian/pmg/dists/trixie/pmg-no-subscription/binary-amd64/Packages.gz)

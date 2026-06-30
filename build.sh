@@ -35,7 +35,8 @@ function git_checkout_version() {
 	path=${1}
 	version=${2}
 
-	tag="$(
+	# First try tags.
+	ref="$(
 		git -C "${path}" for-each-ref --format='%(refname:short)' refs/tags |
 			while read -r tag; do
 				if git -C "${path}" show "${tag}:debian/changelog" >/dev/null 2>&1; then
@@ -52,12 +53,30 @@ function git_checkout_version() {
 			done
 	)"
 
-	if [ -z "${tag}" ]; then
-		echo "Could not find Git tag for ${path} version ${version}" >&2
+	# If no tag exists, try commits from current branch history.
+	if [ -z "${ref}" ]; then
+		ref="$(
+			git -C "${path}" log --format='%H' -- debian/changelog |
+				while read -r commit; do
+					commit_version="$(
+						git -C "${path}" show "${commit}:debian/changelog" |
+							dpkg-parsechangelog -l- -SVersion 2>/dev/null || true
+					)"
+
+					if [ "${commit_version}" = "${version}" ]; then
+						echo "${commit}"
+						break
+					fi
+				done
+		)"
+	fi
+
+	if [ -z "${ref}" ]; then
+		echo "Could not find Git ref for ${path} version ${version}" >&2
 		return 1
 	fi
 
-	git_clean_and_checkout "${tag}" "${path}"
+	git_clean_and_checkout "${ref}" "${path}"
 }
 
 function set_package_info() {

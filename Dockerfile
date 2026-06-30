@@ -12,13 +12,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 	devscripts \
 	dpkg-dev \
 	equivs \
+	faketime \
 	git \
 	lintian \
 	pkg-config \
 	rsync \
 	sudo \
 	jq \
+	dh-cargo \
+	gcc-aarch64-linux-gnu \
+	qemu-user \
+	qemu-user-binfmt \
 	&& rm -rf /var/lib/apt/lists/*
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 COPY . /build/
 WORKDIR /build

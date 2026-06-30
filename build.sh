@@ -235,6 +235,10 @@ function build_dpkg_package() {
 registry = "https://github.com/rust-lang/crates.io-index"
 EOF
 
+		mkdir -p debian
+        echo "git clone https://git.proxmox.com/git/pmg-log-tracker.git" > debian/SOURCE
+        echo "git checkout $(git rev-parse HEAD)" >> debian/SOURCE
+
         PROXMOX_TIME_PATH="$(find ./proxmox -maxdepth 4 -path '*/proxmox-time/Cargo.toml' -print -quit)"
         PROXMOX_TIME_PATH="${PROXMOX_TIME_PATH%/Cargo.toml}"
 

@@ -111,22 +111,25 @@ if [ ! -e "${PACKAGES}/proxmox-mailgateway_${PMG_VERSION:-unknown}_${PACKAGE_ARC
 	git_clone_or_fetch https://git.proxmox.com/git/proxmox-mailgateway.git
 	git_clean_and_checkout "${PMG_GIT_COMMIT}" proxmox-mailgateway
 
-	cd proxmox-mailgateway
+    cd proxmox-mailgateway
 
-	set_package_info
+    set_package_info
 
-	# Install build dependencies for the selected architecture.
-	${SUDO} apt -y build-dep -a"${PACKAGE_ARCH}" ${BUILD_PROFILES} .
+    ${SUDO} apt -y build-dep .
 
-	export DEB_VERSION=$(dpkg-parsechangelog -SVersion)
-	export DEB_VERSION_UPSTREAM=$(dpkg-parsechangelog -SVersion | cut -d- -f1)
+    export DEB_VERSION=$(dpkg-parsechangelog -SVersion)
+    export DEB_VERSION_UPSTREAM=$(dpkg-parsechangelog -SVersion | cut -d- -f1)
 
-	dpkg-buildpackage -a"${PACKAGE_ARCH}" -b -us -uc ${BUILD_PROFILES}
+    make deb
 
-	cd ..
+    mv -f \
+    	proxmox-mailgateway_${DEB_VERSION}_all.deb \
+    	proxmox-mailgateway-container_${DEB_VERSION}_all.deb \
+    	pve-headers_${DEB_VERSION}_all.deb \
+    	"${PACKAGES}/"
 
-	mkdir -p "${PACKAGES}"
-	mv -f ./*.deb "${PACKAGES}/"
+    cd ..
+
 else
 	echo "proxmox-mail-gateway up-to-date"
 fi

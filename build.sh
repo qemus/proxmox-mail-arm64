@@ -205,55 +205,38 @@ function use_repo_rust_toolchain() {
 	fi
 }
 
-function build_dpkg_package() {
-	repo_url=${1}
-	repo_name=${2}
-	version=${3}
+function prepare_pmg_log_tracker() {
+    git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
 
-	if compgen -G "${PACKAGES}/${repo_name}_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
-		echo "${repo_name} up-to-date"
-		return 0
-	fi
+    sed -i '/librust-/d' debian/control
 
-	git_clone_or_fetch "${repo_url}"
-	git_checkout_version "${repo_name}" "${version}"
+    mkdir -p debian
+    echo "git clone https://git.proxmox.com/git/pmg-log-tracker.git" > debian/SOURCE
+    echo "git checkout $(git rev-parse HEAD)" >> debian/SOURCE
 
-    cd "${repo_name}"
+    rm -f .cargo/config .cargo/config.toml
 
-    set_package_info
-
-    if [ "${repo_name}" = "pmg-log-tracker" ]; then
-        git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
-
-        sed -i '/librust-/d' debian/control
-
-        rm -f .cargo/config .cargo/config.toml
-
-        mkdir -p .cargo
-        cat > .cargo/config.toml <<'EOF'
+    mkdir -p .cargo
+    cat > .cargo/config.toml <<'EOF'
 [source.crates-io]
 registry = "https://github.com/rust-lang/crates.io-index"
 EOF
 
-		mkdir -p debian
-        echo "git clone https://git.proxmox.com/git/pmg-log-tracker.git" > debian/SOURCE
-        echo "git checkout $(git rev-parse HEAD)" >> debian/SOURCE
+    PROXMOX_TIME_PATH="$(find ./proxmox -maxdepth 4 -path '*/proxmox-time/Cargo.toml' -print -quit)"
+    PROXMOX_TIME_PATH="${PROXMOX_TIME_PATH%/Cargo.toml}"
 
-        PROXMOX_TIME_PATH="$(find ./proxmox -maxdepth 4 -path '*/proxmox-time/Cargo.toml' -print -quit)"
-        PROXMOX_TIME_PATH="${PROXMOX_TIME_PATH%/Cargo.toml}"
+    if [ -z "${PROXMOX_TIME_PATH}" ]; then
+        echo "Could not find proxmox-time Cargo.toml" >&2
+        exit 1
+    fi
 
-        if [ -z "${PROXMOX_TIME_PATH}" ]; then
-            echo "Could not find proxmox-time Cargo.toml" >&2
-            exit 1
-        fi
-
-        cat >> Cargo.toml <<EOF
+    cat >> Cargo.toml <<EOF
 
 [patch.crates-io]
 proxmox-time = { path = "${PROXMOX_TIME_PATH}" }
 EOF
 
-        cat > debian/rules <<'EOF'
+    cat > debian/rules <<'EOF'
 #!/usr/bin/make -f
 
 %:
@@ -269,27 +252,56 @@ override_dh_auto_install:
 	install -Dm755 target/release/pmg-log-tracker debian/pmg-log-tracker/usr/bin/pmg-log-tracker
 EOF
 
-        chmod +x debian/rules
+    chmod +x debian/rules
 
-        if command -v rustup >/dev/null 2>&1; then
-            export PATH="$HOME/.cargo/bin:$PATH"
+    if command -v rustup >/dev/null 2>&1; then
+        export PATH="$HOME/.cargo/bin:$PATH"
 
-            if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
-                rustup show >/dev/null
-            else
-                echo "No rust-toolchain file found, using default rustup toolchain"
-                export RUSTUP_TOOLCHAIN=stable
-                rustup default stable
-            fi
+        if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
+            rustup show >/dev/null
+        else
+            echo "No rust-toolchain file found, using default rustup toolchain"
+            export RUSTUP_TOOLCHAIN=stable
+            rustup default stable
         fi
     fi
+}
+
+function prepare_package() {
+    repo_name=${1}
+
+    case "${repo_name}" in
+        pmg-log-tracker)
+            prepare_pmg_log_tracker
+            ;;
+    esac
+}
+
+function build_dpkg_package() {
+    repo_url=${1}
+    repo_name=${2}
+    version=${3}
+
+    if compgen -G "${PACKAGES}/${repo_name}_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
+        echo "${repo_name} up-to-date"
+        return 0
+    fi
+
+    git_clone_or_fetch "${repo_url}"
+    git_checkout_version "${repo_name}" "${version}"
+
+    cd "${repo_name}"
+
+    set_package_info
+    prepare_package "${repo_name}"
 
     ${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
+
     dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
 
-	cd ..
+    cd ..
 
-	mv -f ./*.deb "${PACKAGES}/"
+    mv -f ./*.deb "${PACKAGES}/"
 }
 
 function is_container() {

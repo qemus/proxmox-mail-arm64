@@ -215,16 +215,7 @@ function build_dpkg_package() {
 	set_package_info
 
     ${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
-
-    if [ "${PACKAGE_ARCH}" = "arm64" ]; then
-    	export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=/usr/bin/aarch64-linux-gnu-gcc
-    	export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER=qemu-aarch64
-    	export CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu
-    	export TARGET=aarch64-unknown-linux-gnu
-    	export CC_aarch64_unknown_linux_gnu=/usr/bin/aarch64-linux-gnu-gcc
-    fi
-
-	dpkg-buildpackage -a"${PACKAGE_ARCH}" -b -us -uc ${BUILD_PROFILES}
+    dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
 
 	cd ..
 

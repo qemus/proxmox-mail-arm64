@@ -1,26 +1,34 @@
 ARG baseimage=debian:trixie-slim
-FROM ${baseimage} as builder-stage
+
+FROM ${baseimage} AS builder-stage
+
 ARG buildoptions
-# workaround for memory bug https://github.com/rust-lang/cargo/issues/10583
-ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt update && apt-get install -y --no-install-recommends \
-	build-essential curl ca-certificates sudo git lintian \
-	pkg-config libudev-dev libssl-dev libapt-pkg-dev libclang-dev \
-	libpam0g-dev libcrypt-dev libacl1-dev libsystemd-dev \
-	libfuse3-dev libldap2-dev libzstd-dev rsync jq patchelf \
-	zlib1g-dev nettle-dev uuid-dev qemu-user qemu-user-binfmt
-
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -sSf | sh -s -- -y
+RUN apt-get update && apt-get install -y --no-install-recommends \
+	build-essential \
+	ca-certificates \
+	curl \
+	devscripts \
+	dpkg-dev \
+	equivs \
+	git \
+	lintian \
+	pkg-config \
+	rsync \
+	sudo \
+	jq \
+	&& rm -rf /var/lib/apt/lists/*
 
 COPY . /build/
 WORKDIR /build
 
 SHELL ["/bin/bash", "-c"]
+
 RUN chmod +x ./build.sh
-RUN source ~/.cargo/env && ./build.sh ${buildoptions}
+RUN ./build.sh ${buildoptions}
 RUN touch /build/build.log
 
 FROM scratch
+
 COPY --from=builder-stage /build/*.log /build/packages/* /

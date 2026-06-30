@@ -235,10 +235,18 @@ function build_dpkg_package() {
 registry = "https://github.com/rust-lang/crates.io-index"
 EOF
 
-        cat >> Cargo.toml <<'EOF'
+        PROXMOX_TIME_PATH="$(find ../proxmox -maxdepth 4 -path '*/proxmox-time/Cargo.toml' -print -quit)"
+        PROXMOX_TIME_PATH="${PROXMOX_TIME_PATH%/Cargo.toml}"
+
+        if [ -z "${PROXMOX_TIME_PATH}" ]; then
+            echo "Could not find proxmox-time Cargo.toml" >&2
+            exit 1
+        fi
+
+        cat >> Cargo.toml <<EOF
 
 [patch.crates-io]
-proxmox-time = { path = "../proxmox/proxmox-time" }
+proxmox-time = { path = "${PROXMOX_TIME_PATH}" }
 EOF
 
         cat > debian/rules <<'EOF'

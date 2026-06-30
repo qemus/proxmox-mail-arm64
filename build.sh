@@ -223,19 +223,22 @@ function build_dpkg_package() {
     set_package_info
 
     if [ "${repo_name}" = "pmg-log-tracker" ]; then
-        sed -i '/librust-/d' debian/control
-    fi
+    	sed -i '/librust-/d' debian/control
 
-    if command -v rustup >/dev/null 2>&1; then
-	    if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
-		    rustup show >/dev/null
-	    else
-		    echo "No rust-toolchain file found, using default rustup toolchain"
-	    fi
-    fi
+    	if command -v rustup >/dev/null 2>&1; then
+	    	export PATH="$HOME/.cargo/bin:$PATH"
+
+	    	if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
+		    	rustup show >/dev/null
+		    else
+		    	echo "No rust-toolchain file found, using default rustup toolchain"
+			    export RUSTUP_TOOLCHAIN=stable
+		    	rustup default stable
+	    	fi
+    	fi
+     fi
 
     ${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
-
     dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
 
 	cd ..

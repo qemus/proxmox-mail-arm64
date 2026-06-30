@@ -37,7 +37,7 @@ function set_package_info() {
 		sed -i "s#^Maintainer:.*#Maintainer: Github Action <no-reply@github.com>#" debian/control
 		sed -i "s#^Homepage:.*#Homepage: https://github.com/qemus/proxmox-mail-arm64#" debian/control
  	else
-		sed -i "s#^\(Maintainer.*\)\$#\1\nOrigin: https://github.com/wofferl/proxmox-mail-arm64#" debian/control
+		sed -i "s#^\(Maintainer.*\)\$#\1\nOrigin: https://github.com/qemus/proxmox-mail-arm64#" debian/control
 	fi
 }
 
@@ -57,8 +57,6 @@ HOST_SYSTEM=$(dpkg-architecture -qDEB_HOST_GNU_SYSTEM)
 
 BUILD_PROFILES=""
 GITHUB_ACTION=""
-
-export DEB_HOST_RUST_TYPE=${HOST_CPU}-unknown-${HOST_SYSTEM}
 
 . /etc/os-release
 
@@ -107,7 +105,6 @@ done
 cd "${SOURCES}"
 
 # Use master by default so you can quickly test the current PMG source.
-# Replace this with a fixed commit once you know which PMG version you want.
 PMG_GIT_COMMIT="${PMG_GIT_COMMIT:-master}"
 
 if [ ! -e "${PACKAGES}/proxmox-mailgateway_${PMG_VERSION:-unknown}_${PACKAGE_ARCH}.deb" ]; then
@@ -117,10 +114,6 @@ if [ ! -e "${PACKAGES}/proxmox-mailgateway_${PMG_VERSION:-unknown}_${PACKAGE_ARC
 	cd proxmox-mailgateway
 
 	set_package_info
-
-	# Remove Rust-only build-deps if they ever appear.
-	# PMG is mostly Perl/Debian packaging, but this keeps the script tolerant.
-	sed -i '/dh-cargo\|cargo:native\|rustc:native\|librust-/d' debian/control || true
 
 	# Install build dependencies for the selected architecture.
 	${SUDO} apt -y build-dep -a"${PACKAGE_ARCH}" ${BUILD_PROFILES} .

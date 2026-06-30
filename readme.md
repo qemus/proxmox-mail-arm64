@@ -1,14 +1,14 @@
-# proxmox-datacenter-manager-arm64
+# proxmox-mail-gateway-arm64
 
 [![Build]][build_url]
 [![Version]][release_url]
 [![Size]][release_url]
 
-Script for building Proxmox Datacenter Manager **1.x** for ARM64.
+Script for building Proxmox Mail Gateway **9.x** for ARM64.
 
 ## Download pre-built packages
 
-You can find unofficial Debian packages that are created with the build.sh script at [https://github.com/qemus/proxmox-datacenter-arm64/releases](https://github.com/qemus/proxmox-datacenter-arm64/releases).
+You can find unofficial Debian packages that are created with the build.sh script at [https://github.com/qemus/proxmox-mail-arm64/releases](https://github.com/qemus/proxmox-mail-arm64/releases).
 
 With the script you can also download or install all packages of the latest release automatically.
 
@@ -116,15 +116,11 @@ You can add the debug option to redirect the complete build process output also 
 ```
 
 ## Stars 🌟
-[![Stargazers](https://raw.githubusercontent.com/star-stats/stars/refs/heads/data/charts/qemus-proxmox-datacenter-arm64.svg)](https://github.com/qemus/proxmox-datacenter-arm64/stargazers)
+[![Stargazers](https://raw.githubusercontent.com/star-stats/stars/refs/heads/data/charts/qemus-proxmox-mail-arm64.svg)](https://github.com/qemus/proxmox-mail-arm64/stargazers)
 
-## Acknowledgements
+[build_url]: https://github.com/qemus/proxmox-mail-arm64/
+[release_url]: https://github.com/qemus/proxmox-mail-arm64/releases/
 
-Special thanks to [wofferl](https://github.com/wofferl), this project would not exist without his invaluable work.
-
-[build_url]: https://github.com/qemus/proxmox-datacenter-arm64/
-[release_url]: https://github.com/qemus/proxmox-datacenter-arm64/releases/
-
-[Build]: https://github.com/qemus/proxmox-datacenter-arm64/actions/workflows/release.yml/badge.svg
+[Build]: https://github.com/qemus/proxmox-mail-arm64/actions/workflows/release.yml/badge.svg
 [Size]: https://img.shields.io/badge/size-20.3_MB-steelblue?style=flat&color=066da5
-[Version]: https://img.shields.io/github/v/tag/qemus/proxmox-datacenter-arm64?label=version&sort=semver&color=066da5
+[Version]: https://img.shields.io/github/v/tag/qemus/proxmox-mail-arm64?label=version&sort=semver&color=066da5

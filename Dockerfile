@@ -20,6 +20,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 	sudo \
 	jq \
 	dh-cargo \
+    libssl-dev \
+    libapt-pkg-dev \
+    nettle-dev \
+    clang \
+    libclang-dev \
 	&& rm -rf /var/lib/apt/lists/*
 
 ENV RUSTUP_TOOLCHAIN=stable

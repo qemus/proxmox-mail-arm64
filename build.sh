@@ -350,18 +350,51 @@ function dependency_package_version() {
 	package_version "${package}" "${arch}" "${operator}" "${version}"
 }
 
-function build_perlmod() {
-	version=${1}
+function find_debian_package_subdir() {
+	path=${1}
+	package=${2}
 
-	if compgen -G "${PACKAGES}/perlmod-bin_${version}_*.deb" >/dev/null; then
+	control_file="$(
+		find "${path}" -path '*/debian/control' -print |
+			while read -r file; do
+				if grep -q "^Package: ${package}$" "${file}"; then
+					echo "${file}"
+					break
+				fi
+			done
+	)"
+
+	if [ -z "${control_file}" ]; then
+		echo "Could not find Debian package ${package} in ${path}" >&2
+		return 1
+	fi
+
+	control_dir="${control_file%/debian/control}"
+	control_dir="${control_dir#${path}/}"
+
+	echo "${control_dir}"
+}
+
+function build_perlmod() {
+	min_version=${1}
+
+	if compgen -G "${PACKAGES}/perlmod-bin_*_*.deb" >/dev/null; then
 		echo "perlmod-bin up-to-date"
 		return 0
 	fi
 
 	git_clone_or_fetch https://git.proxmox.com/git/perlmod.git
-	git_checkout_subdir_version perlmod proxmox "${version}"
 
-	cd perlmod/proxmox
+	PERLMOD_SUBDIR="$(find_debian_package_subdir perlmod perlmod-bin)"
+
+	cd "perlmod/${PERLMOD_SUBDIR}"
+
+	PERLMOD_SOURCE_VERSION="$(dpkg-parsechangelog -SVersion)"
+
+	if ! dpkg --compare-versions "${PERLMOD_SOURCE_VERSION}" ge "${min_version}"; then
+		echo "perlmod-bin ${PERLMOD_SOURCE_VERSION} is older than required ${min_version}" >&2
+		exit 1
+	fi
 
 	sed -i '/librust-/d' debian/control
 
@@ -374,11 +407,11 @@ function build_perlmod() {
 	cd ../..
 
 	PERLMOD_BIN_DEB="$(
-		find perlmod -maxdepth 2 -name "perlmod-bin_${version}_*.deb" -print -quit
+		find perlmod -maxdepth 2 -name 'perlmod-bin_*_*.deb' -print -quit
 	)"
 
 	if [ -z "${PERLMOD_BIN_DEB}" ]; then
-		echo "Could not find built perlmod-bin package for version ${version}" >&2
+		echo "Could not find built perlmod-bin package" >&2
 		exit 1
 	fi
 
@@ -387,7 +420,7 @@ function build_perlmod() {
 	# perlmod-bin is only needed as a build helper for libpmg-rs-perl.
 	# Do not keep it in the final release package directory.
 	rm -f "${PERLMOD_BIN_DEB}"
-	find perlmod -maxdepth 2 -name "perlmod-bin-dbgsym_${version}_*.deb" -delete 2>/dev/null || true
+	find perlmod -maxdepth 2 -name 'perlmod-bin-dbgsym_*_*.deb' -delete 2>/dev/null || true
 }
 
 function build_libpmg_rs_perl() {

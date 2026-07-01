@@ -350,40 +350,6 @@ function dependency_package_version() {
 	package_version "${package}" "${arch}" "${operator}" "${version}"
 }
 
-function build_perlmod() {
-	version=${1}
-
-	if compgen -G "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
-		echo "perlmod-bin up-to-date"
-		return 0
-	fi
-
-	git_clone_or_fetch https://git.proxmox.com/git/perlmod.git
-	git_checkout_version perlmod "${version}"
-
-	cd perlmod
-
-	sed -i '/librust-/d' debian/control
-
-	if [ -f debian/control ]; then
-		set_package_info
-	fi
-
-	dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
-
-	cd ..
-
-	find perlmod -maxdepth 1 -name "perlmod-bin_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \;
-	find perlmod -maxdepth 1 -name "perlmod-bin-dbgsym_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \; 2>/dev/null || true
-
-	if ! compgen -G "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
-		echo "Could not find built perlmod-bin package for version ${version}" >&2
-		exit 1
-	fi
-
-	${SUDO} apt-get install -y "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb"
-}
-
 function build_libpmg_rs_perl() {
 	version=${1}
 
@@ -763,8 +729,20 @@ if [ -z "${PERLMOD_VERSION}" ]; then
 	exit 1
 fi
 
-echo "Build perlmod ${PERLMOD_VERSION}"
-build_perlmod "${PERLMOD_VERSION}"
+echo "Download perlmod-bin ${PERLMOD_VERSION}"
+download_package perlmod-bin all "${PACKAGES}" ">=" "${PERLMOD_VERSION}"
+
+PERLMOD_BIN_DEB="$(find_package_file perlmod-bin)"
+
+if [ -z "${PERLMOD_BIN_DEB}" ]; then
+	echo "Could not find downloaded perlmod-bin package" >&2
+	exit 1
+fi
+
+${SUDO} apt-get install -y "${PERLMOD_BIN_DEB}"
+
+# perlmod-bin is only needed during the build.
+rm -f "${PERLMOD_BIN_DEB}"
 
 echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
 build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"

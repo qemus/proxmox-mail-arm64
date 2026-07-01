@@ -251,6 +251,18 @@ function download_dependency_package() {
 	fi
 }
 
+function dependency_package_version() {
+	source_deb=${1}
+	package=${2}
+	arch=${3:-amd64}
+
+	constraint=$(get_dependency_constraint "${source_deb}" "${package}" || true)
+	operator=$(dependency_operator "${constraint}")
+	version=$(dependency_version "${constraint}")
+
+	package_version "${package}" "${arch}" "${operator}" "${version}"
+}
+
 function prepare_pmg_log_tracker() {
 	git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
 

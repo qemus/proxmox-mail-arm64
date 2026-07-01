@@ -263,6 +263,34 @@ function dependency_package_version() {
 	package_version "${package}" "${arch}" "${operator}" "${version}"
 }
 
+function build_pmg_rs() {
+	version=${1}
+
+	if compgen -G "${PACKAGES}/libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
+		echo "libpmg-rs-perl up-to-date"
+		return 0
+	fi
+
+	git_clone_or_fetch https://git.proxmox.com/git/pmg-rs.git
+
+	cd pmg-rs
+
+	git clean -ffdx
+	git reset --hard
+
+	cd perlmod
+
+	set_package_info
+
+	${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
+
+	dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
+
+	cd ../..
+
+	mv -f pmg-rs/*.deb "${PACKAGES}/"
+}
+
 function prepare_pmg_log_tracker() {
 	git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
 
@@ -580,10 +608,7 @@ LIBXDGMIME_PERL_VERSION="$(dependency_package_version "${PMG_API_DEB}" libxdgmim
 PMG_MOBILE_QUARANTINE_UI_VERSION="$(dependency_package_version "${PMG_API_DEB}" pmg-mobile-quarantine-ui amd64)"
 
 echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
-build_dpkg_package \
-	https://git.proxmox.com/git/pmg-rs.git \
-	pmg-rs \
-	"${LIBPMG_RS_PERL_VERSION}"
+build_pmg_rs "${LIBPMG_RS_PERL_VERSION}"
 
 echo "Build libxdgmime-perl ${LIBXDGMIME_PERL_VERSION}"
 build_make_deb_package \

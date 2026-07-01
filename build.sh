@@ -425,6 +425,28 @@ function build_perlmod() {
 	find perlmod -maxdepth 2 -name 'perlmod-bin-dbgsym_*_*.deb' -delete 2>/dev/null || true
 }
 
+function find_cargo_package_path() {
+	path=${1}
+	package=${2}
+
+	cargo_file="$(
+		find "${path}" -name Cargo.toml -print |
+			while read -r file; do
+				if grep -q "^[[:space:]]*name[[:space:]]*=[[:space:]]*\"${package}\"" "${file}"; then
+					echo "${file}"
+					break
+				fi
+			done
+	)"
+
+	if [ -z "${cargo_file}" ]; then
+		return 1
+	fi
+
+	cargo_dir="${cargo_file%/Cargo.toml}"
+	realpath "${cargo_dir}"
+}
+
 function build_libpmg_rs_perl() {
 	version=${1}
 
@@ -481,6 +503,34 @@ for line in lines:
 
 path.write_text("\n".join(out) + "\n")
 EOF_PATCH_RULES
+	fi
+
+	PERLMOD_CRATE_PATH="$(find_cargo_package_path "${SOURCES}/perlmod" perlmod || true)"
+	PERLMOD_MACRO_CRATE_PATH="$(find_cargo_package_path "${SOURCES}/perlmod" perlmod-macro || true)"
+
+	if [ -z "${PERLMOD_CRATE_PATH}" ]; then
+		echo "Could not find local perlmod Rust crate" >&2
+		exit 1
+	fi
+
+	if ! grep -q '^\[patch.crates-io\]' Cargo.toml; then
+		cat >> Cargo.toml <<EOF_PATCH
+
+[patch.crates-io]
+perlmod = { path = "${PERLMOD_CRATE_PATH}" }
+EOF_PATCH
+	else
+		if ! grep -q '^perlmod[[:space:]]*=' Cargo.toml; then
+			cat >> Cargo.toml <<EOF_PATCH
+perlmod = { path = "${PERLMOD_CRATE_PATH}" }
+EOF_PATCH
+		fi
+	fi
+
+	if [ -n "${PERLMOD_MACRO_CRATE_PATH}" ] && ! grep -q '^perlmod-macro[[:space:]]*=' Cargo.toml; then
+		cat >> Cargo.toml <<EOF_PATCH
+perlmod-macro = { path = "${PERLMOD_MACRO_CRATE_PATH}" }
+EOF_PATCH
 	fi
 
 	if [ -f debian/control ]; then

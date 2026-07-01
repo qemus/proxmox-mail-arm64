@@ -249,6 +249,30 @@ function download_package() {
 	curl -sSfL "${url}" -o "${file}"
 }
 
+function latest_github_release_asset_version() {
+	repo=${1}
+	asset_prefix=${2}
+	min_version=${3}
+
+	api_url="https://api.github.com/repos/${repo}/releases"
+
+	curl -sSfL "${api_url}" |
+		jq -r --arg prefix "${asset_prefix}" '
+			.[] as $release |
+			$release.assets[] |
+			select(.name | startswith($prefix)) |
+			.name
+		' |
+		sed -E "s/^${asset_prefix//\//\\/}_([^_]+)_arm64\.deb$/\1/" |
+		while read -r version; do
+			if dpkg --compare-versions "${version}" ge "${min_version}"; then
+				echo "${version}"
+			fi
+		done |
+		sort -V |
+		tail -n1
+}
+
 function repackage_static_package_as_arch() {
 	package=${1}
 	version=${2}
@@ -1047,8 +1071,38 @@ download_dependency_package "${PMG_GUI_DEB}" proxmox-widget-toolkit all
 download_dependency_package "${PMG_DOCS_DEB}" libjs-extjs all
 download_dependency_package "${PMG_API_DEB}" pve-xtermjs all
 
-PBS_VERSION="${PBS_VERSION:-4.2.1-1}"
-PBS_CLIENT_VERSION="${PBS_CLIENT_VERSION:-${PBS_VERSION}}"
+PBS_CONSTRAINT=$(get_dependency_constraint "${PMG_API_DEB}" proxmox-backup-client || true)
+
+if [ -z "${PBS_CONSTRAINT}" ]; then
+	PBS_CONSTRAINT=$(get_dependency_constraint "${PMG_META_DEB}" proxmox-backup-client || true)
+fi
+
+PBS_MIN_VERSION=$(dependency_version "${PBS_CONSTRAINT}")
+PBS_MIN_VERSION=${PBS_MIN_VERSION%-*}
+
+if [ -z "${PBS_MIN_VERSION}" ]; then
+	echo "Could not resolve minimum proxmox-backup-client version" >&2
+	exit 1
+fi
+
+PBS_CLIENT_VERSION="$(
+	latest_github_release_asset_version \
+		qemus/proxmox-backup-arm64 \
+		proxmox-backup-client \
+		"${PBS_MIN_VERSION}"
+)"
+
+if [ -z "${PBS_CLIENT_VERSION}" ]; then
+	echo "Could not find proxmox-backup-client arm64 release >= ${PBS_MIN_VERSION}" >&2
+	exit 1
+fi
+
+PBS_VERSION="${PBS_CLIENT_VERSION%-*}"
+
+echo "Resolved proxmox-backup-client:"
+echo "  minimum required: ${PBS_MIN_VERSION}"
+echo "  selected package: ${PBS_CLIENT_VERSION}"
+echo "  release tag:      ${PBS_VERSION}"
 
 JOURNALREADER_VERSION="1.6-1"
 TERMPROXY_VERSION="2.1.0"

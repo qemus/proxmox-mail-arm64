@@ -1028,6 +1028,7 @@ fi
 
 LIBPMG_RS_PERL_VERSION="$(dependency_package_version "${PMG_API_DEB}" libpmg-rs-perl amd64)"
 LIBXDGMIME_PERL_VERSION="$(dependency_package_version "${PMG_API_DEB}" libxdgmime-perl amd64)"
+LIBARCHIVE_PERL_VERSION="$(dependency_package_version "${PMG_API_DEB}" libarchive-perl amd64)"
 PMG_MOBILE_QUARANTINE_UI_VERSION="$(dependency_package_version "${PMG_API_DEB}" pmg-mobile-quarantine-ui amd64)"
 
 if [ -z "${LIBPMG_RS_PERL_VERSION}" ]; then
@@ -1037,6 +1038,11 @@ fi
 
 if [ -z "${LIBXDGMIME_PERL_VERSION}" ]; then
 	echo "Could not resolve libxdgmime-perl version" >&2
+	exit 1
+fi
+
+if [ -z "${LIBARCHIVE_PERL_VERSION}" ]; then
+	echo "Could not resolve libarchive-perl version" >&2
 	exit 1
 fi
 
@@ -1082,6 +1088,11 @@ PMG_MOBILE_QUARANTINE_UI_DEB="${PACKAGES}/pmg-mobile-quarantine-ui_${PMG_MOBILE_
 
 echo "Download pmg-yew-quarantine-i18n dependency"
 download_dependency_package "${PMG_MOBILE_QUARANTINE_UI_DEB}" pmg-yew-quarantine-i18n all
+
+echo "Repackage libarchive-perl ${LIBARCHIVE_PERL_VERSION}"
+repackage_static_package_as_arch \
+	libarchive-perl \
+	"${LIBARCHIVE_PERL_VERSION}"
 
 echo "Download architecture-independent Proxmox dependencies"
 

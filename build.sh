@@ -251,6 +251,23 @@ function download_dependency_package() {
 	fi
 }
 
+function get_build_dependency_min_version() {
+	control_file=${1}
+	dependency=${2}
+
+	awk -v dep="${dependency}" '
+		/^Build-Depends:/,/^[^[:space:]]/ {
+			if (match($0, dep "[[:space:]]*\\(>=[[:space:]]*[^)]*\\)")) {
+				value=substr($0, RSTART, RLENGTH)
+				sub(".*\\(>=[[:space:]]*", "", value)
+				sub("\\).*", "", value)
+				print value
+				exit
+			}
+		}
+	' "${control_file}"
+}
+
 function dependency_package_version() {
 	source_deb=${1}
 	package=${2}
@@ -627,12 +644,24 @@ LIBPMG_RS_PERL_VERSION="$(dependency_package_version "${PMG_API_DEB}" libpmg-rs-
 LIBXDGMIME_PERL_VERSION="$(dependency_package_version "${PMG_API_DEB}" libxdgmime-perl amd64)"
 PMG_MOBILE_QUARANTINE_UI_VERSION="$(dependency_package_version "${PMG_API_DEB}" pmg-mobile-quarantine-ui amd64)"
 
-PERLMOD_VERSION=$(package_version perlmod-bin amd64)
+git_clone_or_fetch https://git.proxmox.com/git/proxmox-perl-rs.git
+
+cd proxmox-perl-rs
+git clean -ffdx
+git reset --hard
+
+PERLMOD_VERSION="$(
+	get_build_dependency_min_version \
+		"pmg-rs/debian/control" \
+		"perlmod-bin"
+)"
 
 if [ -z "${PERLMOD_VERSION}" ]; then
-    echo "Could not resolve perlmod-bin version" >&2
-    exit 1
+	echo "Could not resolve required perlmod-bin version" >&2
+	exit 1
 fi
+
+cd ..
 
 echo "Build perlmod ${PERLMOD_VERSION}"
 build_perlmod "${PERLMOD_VERSION}"

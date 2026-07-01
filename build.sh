@@ -249,6 +249,60 @@ function download_package() {
 	curl -sSfL "${url}" -o "${file}"
 }
 
+function repackage_static_package_as_arch() {
+	package=${1}
+	version=${2}
+
+	target="${PACKAGES}/${package}_${version}_${PACKAGE_ARCH}.deb"
+
+	if [ -e "${target}" ]; then
+		echo "${package} up-to-date"
+		return 0
+	fi
+
+	url=$(select_package "${package}" amd64 "=" "${version}")
+
+	if [ -z "${url}" ]; then
+		echo "Could not find ${package} ${version} amd64 package" >&2
+		exit 1
+	fi
+
+	source_deb="${PACKAGES}/${url##*/}"
+
+	if [ ! -e "${source_deb}" ]; then
+		echo "Downloading ${source_deb##*/}"
+		curl -sSfL "${url}" -o "${source_deb}"
+	fi
+
+	tmpdir="$(mktemp -d)"
+
+	dpkg-deb -R "${source_deb}" "${tmpdir}/pkg"
+
+	elf_files="$(
+		find "${tmpdir}/pkg" -type f ! -path "${tmpdir}/pkg/DEBIAN/*" -exec sh -c '
+			for file do
+				if readelf -h "$file" >/dev/null 2>&1; then
+					echo "$file"
+				fi
+			done
+		' sh {} +
+	)"
+
+	if [ -n "${elf_files}" ]; then
+		echo "${package} contains native ELF files and cannot be safely repackaged:" >&2
+		echo "${elf_files}" >&2
+		rm -rf "${tmpdir}"
+		exit 1
+	fi
+
+	sed -i "s/^Architecture:.*/Architecture: ${PACKAGE_ARCH}/" "${tmpdir}/pkg/DEBIAN/control"
+
+	dpkg-deb -b "${tmpdir}/pkg" "${target}"
+
+	rm -rf "${tmpdir}"
+	rm -f "${source_deb}"
+}
+
 function get_dependency_constraint() {
 	deb=${1}
 	dependency=${2}
@@ -970,12 +1024,10 @@ build_make_deb_package \
 	libxdgmime-perl \
 	"${LIBXDGMIME_PERL_VERSION}"
 
-echo "Build pmg-mobile-quarantine-ui ${PMG_MOBILE_QUARANTINE_UI_VERSION}"
-build_make_deb_package \
-	https://github.com/proxmox/pmg-yew-quarantine-gui.git \
-	pmg-yew-quarantine-gui \
-	"${PMG_MOBILE_QUARANTINE_UI_VERSION}" \
-	pmg-mobile-quarantine-ui
+echo "Repackage pmg-mobile-quarantine-ui ${PMG_MOBILE_QUARANTINE_UI_VERSION}"
+repackage_static_package_as_arch \
+	pmg-mobile-quarantine-ui \
+	"${PMG_MOBILE_QUARANTINE_UI_VERSION}"
 
 echo "Download architecture-independent Proxmox dependencies"
 

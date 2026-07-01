@@ -35,7 +35,6 @@ function git_checkout_version() {
 	path=${1}
 	version=${2}
 
-	# First try tags.
 	ref="$(
 		git -C "${path}" for-each-ref --format='%(refname:short)' refs/tags |
 			while read -r tag; do
@@ -53,7 +52,6 @@ function git_checkout_version() {
 			done
 	)"
 
-	# If no tag exists, try commits from current branch history.
 	if [ -z "${ref}" ]; then
 		ref="$(
 			git -C "${path}" log --format='%H' -- debian/changelog |
@@ -80,7 +78,7 @@ function git_checkout_version() {
 }
 
 function set_package_info() {
-	if [ "$GITHUB_ACTION" ]; then
+	if [ "${GITHUB_ACTION}" ]; then
 		sed -i "s#^Maintainer:.*#Maintainer: Github Action <no-reply@github.com>#" debian/control
 		sed -i "s#^Homepage:.*#Homepage: https://github.com/qemus/proxmox-mail-arm64#" debian/control
 	else
@@ -115,6 +113,8 @@ function load_packages() {
 function select_package() {
 	package_name=${1}
 	arch_filter=${2:-}
+	version_operator=${3:-}
+	version_filter=${4:-}
 
 	version_target="0"
 	file_target=""
@@ -124,6 +124,10 @@ function select_package() {
 
 		if [ -n "${arch_filter}" ] && [ "${arch}" != "${arch_filter}" ]; then
 			continue
+		fi
+
+		if [ -n "${version_operator}" ] && [ -n "${version_filter}" ]; then
+			dpkg --compare-versions "${version}" "${version_operator}" "${version_filter}" || continue
 		fi
 
 		if dpkg --compare-versions "${version}" ">>" "${version_target}"; then
@@ -140,8 +144,10 @@ function select_package() {
 function package_version() {
 	package_name=${1}
 	arch_filter=${2:-}
+	version_operator=${3:-}
+	version_filter=${4:-}
 
-	url=$(select_package "${package_name}" "${arch_filter}")
+	url=$(select_package "${package_name}" "${arch_filter}" "${version_operator}" "${version_filter}")
 	file=${url##*/}
 
 	echo "${file}" |
@@ -152,8 +158,10 @@ function download_package() {
 	package=${1}
 	arch_filter=${2:-all}
 	dest=${3:-${PACKAGES}}
+	version_operator=${4:-}
+	version_filter=${5:-}
 
-	url=$(select_package "${package}" "${arch_filter}")
+	url=$(select_package "${package}" "${arch_filter}" "${version_operator}" "${version_filter}")
 
 	if [ -z "${url}" ]; then
 		echo "Error: package ${package} with architecture ${arch_filter} not found" >&2
@@ -167,50 +175,90 @@ function download_package() {
 		return 0
 	fi
 
-	echo "${package} downloading..."
+	echo "${package} downloading... ${url}"
 	curl -sSfL "${url}" -o "${file}"
 }
 
-function use_repo_rust_toolchain() {
-	if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
-		rustup show >/dev/null
+function get_dependency_constraint() {
+	deb=${1}
+	dependency=${2}
+
+	dpkg-deb -f "${deb}" Depends |
+		tr ',' '\n' |
+		sed 's/^ *//' |
+		awk -v dep="${dependency}" '
+			$1 == dep {
+				gsub(/[()]/, "", $2)
+				print $2 ";" $3
+				exit
+			}
+		'
+}
+
+function dependency_operator() {
+	constraint=${1}
+
+	if [ -n "${constraint}" ]; then
+		echo "${constraint%;*}"
+	fi
+}
+
+function dependency_version() {
+	constraint=${1}
+
+	if [ -n "${constraint}" ]; then
+		echo "${constraint#*;}"
+	fi
+}
+
+function download_dependency_package() {
+	meta_deb=${1}
+	package=${2}
+	arch=${3:-all}
+
+	constraint=$(get_dependency_constraint "${meta_deb}" "${package}" || true)
+	operator=$(dependency_operator "${constraint}")
+	version=$(dependency_version "${constraint}")
+
+	if [ -n "${operator}" ] && [ -n "${version}" ]; then
+		download_package "${package}" "${arch}" "${PACKAGES}" "${operator}" "${version}"
 	else
-		echo "No rust-toolchain file found, using default rustup toolchain"
+		download_package "${package}" "${arch}" "${PACKAGES}"
 	fi
 }
 
 function prepare_pmg_log_tracker() {
-    git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
+	git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
 
-    sed -i '/librust-/d' debian/control
+	sed -i '/librust-/d' debian/control
 
-    mkdir -p debian
-    echo "git clone https://git.proxmox.com/git/pmg-log-tracker.git" > debian/SOURCE
-    echo "git checkout $(git rev-parse HEAD)" >> debian/SOURCE
+	mkdir -p debian
+	echo "git clone https://git.proxmox.com/git/pmg-log-tracker.git" > debian/SOURCE
+	echo "git checkout $(git rev-parse HEAD)" >> debian/SOURCE
 
-    rm -f .cargo/config .cargo/config.toml
+	rm -f .cargo/config .cargo/config.toml
 
-    mkdir -p .cargo
-    cat > .cargo/config.toml <<'EOF'
+	mkdir -p .cargo
+	cat > .cargo/config.toml <<'EOF'
 [source.crates-io]
 registry = "https://github.com/rust-lang/crates.io-index"
 EOF
 
-    PROXMOX_TIME_PATH="$(find ./proxmox -maxdepth 4 -path '*/proxmox-time/Cargo.toml' -print -quit)"
-    PROXMOX_TIME_PATH="${PROXMOX_TIME_PATH%/Cargo.toml}"
+	PROXMOX_TIME_PATH="$(find ./proxmox -maxdepth 4 -path '*/proxmox-time/Cargo.toml' -print -quit)"
+	PROXMOX_TIME_PATH="${PROXMOX_TIME_PATH%/Cargo.toml}"
 
-    if [ -z "${PROXMOX_TIME_PATH}" ]; then
-        echo "Could not find proxmox-time Cargo.toml" >&2
-        exit 1
-    fi
+	if [ -z "${PROXMOX_TIME_PATH}" ]; then
+		echo "Could not find proxmox-time Cargo.toml" >&2
+		exit 1
+	fi
 
-    cat >> Cargo.toml <<EOF
+	cat >> Cargo.toml <<EOF
 
 [patch.crates-io]
 proxmox-time = { path = "${PROXMOX_TIME_PATH}" }
 EOF
 
-    cat > debian/rules <<'EOF'
+	cat > debian/rules <<'EOF'
 #!/usr/bin/make -f
 
 %:
@@ -223,42 +271,39 @@ override_dh_auto_install:
 	install -Dm755 target/release/pmg-log-tracker debian/pmg-log-tracker/usr/bin/pmg-log-tracker
 EOF
 
-    chmod +x debian/rules
+	chmod +x debian/rules
 
-    if command -v rustup >/dev/null 2>&1; then
-        export PATH="$HOME/.cargo/bin:$PATH"
+	if command -v rustup >/dev/null 2>&1; then
+		export PATH="$HOME/.cargo/bin:$PATH"
 
-        if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
-            rustup show >/dev/null
-        else
-            echo "No rust-toolchain file found, using default rustup toolchain"
-            export RUSTUP_TOOLCHAIN=stable
-            rustup default stable
-        fi
-    fi
+		if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
+			rustup show >/dev/null
+		else
+			echo "No rust-toolchain file found, using default rustup toolchain"
+			export RUSTUP_TOOLCHAIN=stable
+			rustup default stable
+		fi
+	fi
 }
 
 function prepare_proxmox_spamassassin() {
-	sed -i "s/_amd64\.deb/_${PACKAGE_ARCH}.deb/g" Makefile
-	sed -i "s/_amd64\.changes/_${PACKAGE_ARCH}.changes/g" Makefile
-	sed -i "s/_amd64\.buildinfo/_${PACKAGE_ARCH}.buildinfo/g" Makefile
-
-	echo "Patched proxmox-spamassassin Makefile:"
-	grep -n "amd64\|${PACKAGE_ARCH}" Makefile || true
+    sed -i "s/_amd64\.deb/_${PACKAGE_ARCH}.deb/g" Makefile
+    sed -i "s/_amd64\.changes/_${PACKAGE_ARCH}.changes/g" Makefile
+    sed -i "s/_amd64\.buildinfo/_${PACKAGE_ARCH}.buildinfo/g" Makefile
 }
 
 function prepare_package() {
-    repo_name=${1}
+	repo_name=${1}
 
-    case "${repo_name}" in
-        pmg-log-tracker)
-            prepare_pmg_log_tracker
-            ;;
+	case "${repo_name}" in
+		pmg-log-tracker)
+			prepare_pmg_log_tracker
+			;;
 
-        proxmox-spamassassin)
-            prepare_proxmox_spamassassin
-            ;;
-    esac
+		proxmox-spamassassin)
+			prepare_proxmox_spamassassin
+			;;
+	esac
 }
 
 function build_make_deb_package() {
@@ -279,7 +324,7 @@ function build_make_deb_package() {
 	set_package_info
 	prepare_package "${repo_name}"
 
-	${SUDO} apt-get -y build-dep .
+	${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
 
 	make deb
 
@@ -289,30 +334,30 @@ function build_make_deb_package() {
 }
 
 function build_dpkg_package() {
-    repo_url=${1}
-    repo_name=${2}
-    version=${3}
+	repo_url=${1}
+	repo_name=${2}
+	version=${3}
 
-    if compgen -G "${PACKAGES}/${repo_name}_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
-        echo "${repo_name} up-to-date"
-        return 0
-    fi
+	if compgen -G "${PACKAGES}/${repo_name}_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
+		echo "${repo_name} up-to-date"
+		return 0
+	fi
 
-    git_clone_or_fetch "${repo_url}"
-    git_checkout_version "${repo_name}" "${version}"
+	git_clone_or_fetch "${repo_url}"
+	git_checkout_version "${repo_name}" "${version}"
 
-    cd "${repo_name}"
+	cd "${repo_name}"
 
-    set_package_info
-    prepare_package "${repo_name}"
+	set_package_info
+	prepare_package "${repo_name}"
 
-    ${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
+	${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
 
-    dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
+	dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
 
-    cd ..
+	cd ..
 
-    mv -f ./*.deb "${PACKAGES}/"
+	mv -f ./*.deb "${PACKAGES}/"
 }
 
 function is_container() {
@@ -333,8 +378,8 @@ function download_release() {
 		curl -sSfL "${release_url}" |
 			jq -r '
 				.assets[]
-				| select(.name | test("static|dbgsym") | not)
-				| .browser_download_url
+                | select(.name | test("static|dbgsym") | not)
+                | .browser_download_url
 			'
 	)
 
@@ -344,25 +389,17 @@ function download_release() {
 	fi
 
 	for download_url in "${download_urls[@]}"; do
-
 		file=$(basename "${download_url}")
-		
+
 		if [ -e "${PACKAGES}/${file}" ]; then
 			echo "${file} already exists"
 		else
 			echo "Downloading ${file}"
 			curl -sSfL "${download_url}" -o "${PACKAGES}/${file}"
 		fi
-
+	
         [[ "$file" == *"dbgsym"* ]] && rm "${PACKAGES}/${file}" && continue
-
-        if is_container; then
-            [[ "$file" == "proxmox-kernel-"* ]] && rm "${PACKAGES}/${file}" && continue
-	    	[[ "$file" == "proxmox-kernel-helper"* ]] && rm "${PACKAGES}/${file}" && continue
-		    [[ "$file" == "proxmox-default-kernel"* ]] && rm "${PACKAGES}/${file}" && continue
-		    [[ "$file" == "proxmox-mailgateway-meta"* ]] && rm "${PACKAGES}/${file}" && continue
-		fi
-
+	
 		file_list+=("${PACKAGES}/${file}")
 	done
 }
@@ -382,34 +419,24 @@ SUDO="${SUDO:-sudo -E}"
 SCRIPT=$(realpath "${0}")
 BASE=$(dirname "${SCRIPT}")
 PACKAGES="${BASE}/packages"
-PACKAGES_BUILD="${BASE}/packages_build"
-PATCHES="${BASE}/patches"
 SOURCES="${BASE}/sources"
 LOGFILE="build.log"
-PACKAGE_ARCH=$(dpkg-architecture -q DEB_BUILD_ARCH)
-HOST_ARCH=$(dpkg-architecture -q DEB_HOST_ARCH)
-HOST_CPU=$(dpkg-architecture -q DEB_HOST_GNU_CPU)
-HOST_SYSTEM=$(dpkg-architecture -q DEB_HOST_GNU_SYSTEM)
-BUILD_PACKAGE="server"
+PACKAGE_ARCH=$(dpkg-architecture -qDEB_BUILD_ARCH)
 BUILD_PROFILES=""
 GITHUB_ACTION=""
 PMG_VERSION="${PMG_VERSION:-9.1.0}"
 
-export DEB_HOST_RUST_TYPE=${HOST_CPU}-unknown-${HOST_SYSTEM}
-
 . /etc/os-release
 
-[ ! -d "${PACKAGES}" ] && mkdir -p "${PACKAGES}"
-[ ! -d "${SOURCES}" ] && mkdir -p "${SOURCES}"
+mkdir -p "${PACKAGES}" "${SOURCES}"
 
 while [ "$#" -ge 1 ]; do
 	case "$1" in
-
 	version=*)
 		PMG_VERSION="${1#*=}"
 		;;
 
-    install*)
+	install*)
 		if [[ "$1" =~ install=[0-9.-]+ ]]; then
 			download_release tags/${1/*=/}
 		else
@@ -450,7 +477,7 @@ while [ "$#" -ge 1 ]; do
 		;;
 
 	*)
-		echo "usage: $0 [version=9.1] [github=9.1] [nocheck] [debug]"
+		echo "usage: $0 [version] [github] [download] [install] [nocheck] [debug]"
 		exit 1
 		;;
 	esac
@@ -460,52 +487,57 @@ done
 [ -n "${BUILD_PROFILES}" ] && BUILD_PROFILES="--build-profiles=${BUILD_PROFILES#,}"
 
 if [[ ! " ${DEB_BUILD_OPTIONS:-} " =~ " nocheck " ]]; then
-    export DEB_BUILD_OPTIONS="${DEB_BUILD_OPTIONS:+${DEB_BUILD_OPTIONS} }nocheck"
+	export DEB_BUILD_OPTIONS="${DEB_BUILD_OPTIONS:+${DEB_BUILD_OPTIONS} }nocheck"
 fi
 
 echo "Download package list from PMG repository"
-
 PACKAGES_PMG=$(load_packages http://download.proxmox.com/debian/pmg/dists/trixie/pmg-no-subscription/binary-amd64/Packages.gz)
-PMG_META_VERSION="${PMG_VERSION}"
 
-while ! select_package proxmox-mailgateway all | grep -q "proxmox-mailgateway_${PMG_META_VERSION}_"; do
-    PMG_META_VERSION="${PMG_META_VERSION%.*}"
+PMG_META_VERSION=$(package_version proxmox-mailgateway all "<=" "${PMG_VERSION}")
 
-    if [ -z "${PMG_META_VERSION}" ] || [ "${PMG_META_VERSION}" = "${PMG_VERSION}" ]; then
-        echo "Could not resolve proxmox-mailgateway version for ${PMG_VERSION}" >&2
-        exit 1
-    fi
-done
+if [ -z "${PMG_META_VERSION}" ]; then
+	echo "Could not resolve proxmox-mailgateway version for ${PMG_VERSION}" >&2
+	exit 1
+fi
 
 cd "${SOURCES}"
 
 echo "Build proxmox-mailgateway ${PMG_META_VERSION}"
 build_make_deb_package \
-    https://git.proxmox.com/git/proxmox-mailgateway.git \
-    proxmox-mailgateway \
-    "${PMG_META_VERSION}"
+	https://git.proxmox.com/git/proxmox-mailgateway.git \
+	proxmox-mailgateway \
+	"${PMG_META_VERSION}"
+
+PMG_META_DEB="${PACKAGES}/proxmox-mailgateway_${PMG_META_VERSION}_all.deb"
+
+if [ ! -e "${PMG_META_DEB}" ]; then
+	echo "Could not find built meta package: ${PMG_META_DEB}" >&2
+	exit 1
+fi
 
 echo "Download architecture-independent PMG packages"
-download_package pmg-api all
-download_package pmg-gui all
-download_package pmg-docs all
-download_package pmg-i18n all
+download_dependency_package "${PMG_META_DEB}" pmg-api all
+download_dependency_package "${PMG_META_DEB}" pmg-gui all
+download_dependency_package "${PMG_META_DEB}" pmg-docs all
+download_dependency_package "${PMG_META_DEB}" pmg-i18n all
 
-PMG_LOG_TRACKER_VERSION=$(package_version pmg-log-tracker amd64)
-PROXMOX_SPAMASSASSIN_VERSION=$(package_version proxmox-spamassassin amd64)
+PMG_LOG_TRACKER_CONSTRAINT=$(get_dependency_constraint "${PMG_META_DEB}" pmg-log-tracker || true)
+PMG_LOG_TRACKER_VERSION=$(package_version pmg-log-tracker amd64 "$(dependency_operator "${PMG_LOG_TRACKER_CONSTRAINT}")" "$(dependency_version "${PMG_LOG_TRACKER_CONSTRAINT}")")
+
+PROXMOX_SPAMASSASSIN_CONSTRAINT=$(get_dependency_constraint "${PMG_META_DEB}" proxmox-spamassassin || true)
+PROXMOX_SPAMASSASSIN_VERSION=$(package_version proxmox-spamassassin amd64 "$(dependency_operator "${PROXMOX_SPAMASSASSIN_CONSTRAINT}")" "$(dependency_version "${PROXMOX_SPAMASSASSIN_CONSTRAINT}")")
 
 echo "Build pmg-log-tracker ${PMG_LOG_TRACKER_VERSION}"
 build_dpkg_package \
-    https://git.proxmox.com/git/pmg-log-tracker.git \
-    pmg-log-tracker \
-    "${PMG_LOG_TRACKER_VERSION}"
+	https://git.proxmox.com/git/pmg-log-tracker.git \
+	pmg-log-tracker \
+	"${PMG_LOG_TRACKER_VERSION}"
 
 echo "Build proxmox-spamassassin ${PROXMOX_SPAMASSASSIN_VERSION}"
 build_make_deb_package \
-    https://git.proxmox.com/git/proxmox-spamassassin.git \
-    proxmox-spamassassin \
-    "${PROXMOX_SPAMASSASSIN_VERSION}"
+	https://git.proxmox.com/git/proxmox-spamassassin.git \
+	proxmox-spamassassin \
+	"${PROXMOX_SPAMASSASSIN_VERSION}"
 
-echo
-echo "Built/downloaded packages:"
-ls -lh "${PACKAGES}"
+# Remove debug symbol packages from output directory.
+rm -f "${PACKAGES}"/*-dbgsym_*.deb "${PACKAGES}"/*.ddeb

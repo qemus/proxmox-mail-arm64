@@ -353,7 +353,7 @@ function dependency_package_version() {
 function build_perlmod() {
 	version=${1}
 
-	if compgen -G "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
+	if compgen -G "${PACKAGES}/perlmod-bin_${version}_*.deb" >/dev/null; then
 		echo "perlmod-bin up-to-date"
 		return 0
 	fi
@@ -373,20 +373,21 @@ function build_perlmod() {
 
 	cd ../..
 
-	find perlmod -maxdepth 2 -name "perlmod-bin_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \;
-	find perlmod -maxdepth 2 -name "perlmod-bin-dbgsym_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \; 2>/dev/null || true
+	PERLMOD_BIN_DEB="$(
+		find perlmod -maxdepth 2 -name "perlmod-bin_${version}_*.deb" -print -quit
+	)"
 
-	if ! compgen -G "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
+	if [ -z "${PERLMOD_BIN_DEB}" ]; then
 		echo "Could not find built perlmod-bin package for version ${version}" >&2
 		exit 1
 	fi
 
-	${SUDO} apt-get install -y "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb"
+	${SUDO} apt-get install -y "${PERLMOD_BIN_DEB}"
 
 	# perlmod-bin is only needed as a build helper for libpmg-rs-perl.
 	# Do not keep it in the final release package directory.
-	rm -f "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb"
-	rm -f "${PACKAGES}/perlmod-bin-dbgsym_${version}_${PACKAGE_ARCH}.deb"
+	rm -f "${PERLMOD_BIN_DEB}"
+	find perlmod -maxdepth 2 -name "perlmod-bin-dbgsym_${version}_*.deb" -delete 2>/dev/null || true
 }
 
 function build_libpmg_rs_perl() {
@@ -770,9 +771,6 @@ fi
 
 echo "Build perlmod ${PERLMOD_VERSION}"
 build_perlmod "${PERLMOD_VERSION}"
-
-echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
-build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"
 
 echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
 build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"

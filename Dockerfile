@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     clang \
     libclang-dev \
     libsystemd-dev \
-    uuid-dev
+    uuid-dev \
 	&& rm -rf /var/lib/apt/lists/*
 
 ENV RUSTUP_TOOLCHAIN=stable

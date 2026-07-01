@@ -1090,7 +1090,7 @@ echo "Download pmg-yew-quarantine-i18n dependency"
 download_dependency_package "${PMG_MOBILE_QUARANTINE_UI_DEB}" pmg-yew-quarantine-i18n all
 
 echo "Build libarchive-perl ${LIBARCHIVE_PERL_VERSION}"
-build_dpkg_package \
+build_make_deb_package \
 	https://git.proxmox.com/git/libarchive-perl.git \
 	libarchive-perl \
 	"${LIBARCHIVE_PERL_VERSION}"

@@ -350,6 +350,45 @@ function dependency_package_version() {
 	package_version "${package}" "${arch}" "${operator}" "${version}"
 }
 
+function build_perlmod() {
+	version=${1}
+
+	if compgen -G "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
+		echo "perlmod-bin up-to-date"
+		return 0
+	fi
+
+	git_clone_or_fetch https://git.proxmox.com/git/perlmod.git
+	git_checkout_subdir_version perlmod proxmox "${version}"
+
+	cd perlmod/proxmox
+
+	sed -i '/librust-/d' debian/control
+
+	if [ -f debian/control ]; then
+		set_package_info
+	fi
+
+	dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
+
+	cd ../..
+
+	find perlmod -maxdepth 2 -name "perlmod-bin_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \;
+	find perlmod -maxdepth 2 -name "perlmod-bin-dbgsym_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \; 2>/dev/null || true
+
+	if ! compgen -G "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
+		echo "Could not find built perlmod-bin package for version ${version}" >&2
+		exit 1
+	fi
+
+	${SUDO} apt-get install -y "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb"
+
+	# perlmod-bin is only needed as a build helper for libpmg-rs-perl.
+	# Do not keep it in the final release package directory.
+	rm -f "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb"
+	rm -f "${PACKAGES}/perlmod-bin-dbgsym_${version}_${PACKAGE_ARCH}.deb"
+}
+
 function build_libpmg_rs_perl() {
 	version=${1}
 
@@ -729,20 +768,11 @@ if [ -z "${PERLMOD_VERSION}" ]; then
 	exit 1
 fi
 
-echo "Install perlmod-bin ${PERLMOD_VERSION}"
-${SUDO} apt-get install -y perlmod-bin
+echo "Build perlmod ${PERLMOD_VERSION}"
+build_perlmod "${PERLMOD_VERSION}"
 
-INSTALLED_PERLMOD_VERSION="$(dpkg-query -W -f='${Version}' perlmod-bin 2>/dev/null || true)"
-
-if [ -z "${INSTALLED_PERLMOD_VERSION}" ]; then
-	echo "Could not install perlmod-bin" >&2
-	exit 1
-fi
-
-if ! dpkg --compare-versions "${INSTALLED_PERLMOD_VERSION}" ge "${PERLMOD_VERSION}"; then
-	echo "Installed perlmod-bin ${INSTALLED_PERLMOD_VERSION} is older than required ${PERLMOD_VERSION}" >&2
-	exit 1
-fi
+echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
+build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"
 
 echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
 build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"

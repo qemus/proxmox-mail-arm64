@@ -112,17 +112,17 @@ function load_packages() {
 }
 
 function download_external_package() {
-    url=${1}
+	url=${1}
 
-    file="${PACKAGES}/${url##*/}"
+	file="${PACKAGES}/${url##*/}"
 
-    if [ -e "${file}" ]; then
-        echo "${file##*/} up-to-date"
-        return
-    fi
+	if [ -e "${file}" ]; then
+		echo "${file##*/} up-to-date"
+		return
+	fi
 
-    echo "Downloading ${file##*/}"
-    curl -fsSL "${url}" -o "${file}"
+	echo "Downloading ${file##*/}"
+	curl -fsSL "${url}" -o "${file}"
 }
 
 function select_package() {
@@ -281,17 +281,17 @@ function dependency_package_version() {
 }
 
 function build_perlmod() {
-	version=${1:-0.14.5}
+	version=${1}
 
 	if compgen -G "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
 		echo "perlmod-bin up-to-date"
 		return 0
 	fi
 
-	git_clone_or_fetch https://git.proxmox.com/git/perlmod.git
-	git_checkout_version perlmod "${version}"
+	git_clone_or_fetch https://git.proxmox.com/git/perlmod-rs.git
+	git_checkout_version perlmod-rs "${version}"
 
-	cd perlmod
+	cd perlmod-rs
 
 	sed -i '/librust-/d' debian/control
 
@@ -336,8 +336,8 @@ function build_libpmg_rs_perl() {
 
 	cd ../..
 
-	mv -f proxmox-perl-rs/libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb "${PACKAGES}/"
-	mv -f proxmox-perl-rs/libpmg-rs-perl-dbgsym_${version}_${PACKAGE_ARCH}.deb "${PACKAGES}/" 2>/dev/null || true
+	find proxmox-perl-rs -maxdepth 2 -name "libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \;
+	find proxmox-perl-rs -maxdepth 2 -name "libpmg-rs-perl-dbgsym_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \; 2>/dev/null || true
 }
 
 function prepare_pmg_log_tracker() {
@@ -417,9 +417,10 @@ function build_make_deb_package() {
 	repo_url=${1}
 	repo_name=${2}
 	version=${3}
+	output_package=${4:-${repo_name}}
 
-	if compgen -G "${PACKAGES}/${repo_name}_${version}_*.deb" >/dev/null; then
-		echo "${repo_name} up-to-date"
+	if compgen -G "${PACKAGES}/${output_package}_${version}_*.deb" >/dev/null; then
+		echo "${output_package} up-to-date"
 		return 0
 	fi
 
@@ -640,9 +641,39 @@ PMG_API_DEB="$(find_package_file pmg-api)"
 PMG_GUI_DEB="$(find_package_file pmg-gui)"
 PMG_DOCS_DEB="$(find_package_file pmg-docs)"
 
+if [ -z "${PMG_API_DEB}" ]; then
+	echo "Could not find downloaded pmg-api package" >&2
+	exit 1
+fi
+
+if [ -z "${PMG_GUI_DEB}" ]; then
+	echo "Could not find downloaded pmg-gui package" >&2
+	exit 1
+fi
+
+if [ -z "${PMG_DOCS_DEB}" ]; then
+	echo "Could not find downloaded pmg-docs package" >&2
+	exit 1
+fi
+
 LIBPMG_RS_PERL_VERSION="$(dependency_package_version "${PMG_API_DEB}" libpmg-rs-perl amd64)"
 LIBXDGMIME_PERL_VERSION="$(dependency_package_version "${PMG_API_DEB}" libxdgmime-perl amd64)"
 PMG_MOBILE_QUARANTINE_UI_VERSION="$(dependency_package_version "${PMG_API_DEB}" pmg-mobile-quarantine-ui amd64)"
+
+if [ -z "${LIBPMG_RS_PERL_VERSION}" ]; then
+	echo "Could not resolve libpmg-rs-perl version" >&2
+	exit 1
+fi
+
+if [ -z "${LIBXDGMIME_PERL_VERSION}" ]; then
+	echo "Could not resolve libxdgmime-perl version" >&2
+	exit 1
+fi
+
+if [ -z "${PMG_MOBILE_QUARANTINE_UI_VERSION}" ]; then
+	echo "Could not resolve pmg-mobile-quarantine-ui version" >&2
+	exit 1
+fi
 
 git_clone_or_fetch https://git.proxmox.com/git/proxmox-perl-rs.git
 
@@ -668,8 +699,6 @@ build_perlmod "${PERLMOD_VERSION}"
 
 echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
 build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"
-echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
-build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"
 
 echo "Build libxdgmime-perl ${LIBXDGMIME_PERL_VERSION}"
 build_make_deb_package \
@@ -681,7 +710,8 @@ echo "Build pmg-mobile-quarantine-ui ${PMG_MOBILE_QUARANTINE_UI_VERSION}"
 build_make_deb_package \
 	https://git.proxmox.com/git/pmg-yew-quarantine-gui.git \
 	pmg-yew-quarantine-gui \
-	"${PMG_MOBILE_QUARANTINE_UI_VERSION}"
+	"${PMG_MOBILE_QUARANTINE_UI_VERSION}" \
+	pmg-mobile-quarantine-ui
 
 echo "Download architecture-independent Proxmox dependencies"
 
@@ -702,18 +732,27 @@ download_dependency_package "${PMG_GUI_DEB}" proxmox-widget-toolkit all
 download_dependency_package "${PMG_DOCS_DEB}" libjs-extjs all
 download_dependency_package "${PMG_API_DEB}" pve-xtermjs all
 
-PBS_CONSTRAINT=$(get_dependency_constraint "${PMG_META_DEB}" proxmox-backup-client || true)
+PBS_CONSTRAINT=$(get_dependency_constraint "${PMG_API_DEB}" proxmox-backup-client || true)
 PBS_VERSION=$(dependency_version "${PBS_CONSTRAINT}")
 PBS_VERSION=${PBS_VERSION%-*}    # strip Debian revision if present
 
-download_external_package \
-    "https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_VERSION}/proxmox-backup-client_${PBS_VERSION}-1_arm64.deb"
-	
-download_external_package \
-    "https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_VERSION}/proxmox-mini-journalreader_1.6-1_arm64.deb"
+if [ -z "${PBS_VERSION}" ]; then
+	echo "Could not resolve proxmox-backup-client version" >&2
+	exit 1
+fi
+
+PBS_CLIENT_VERSION="${PBS_VERSION}-1"
+JOURNALREADER_VERSION="1.6-1"
+TERMPROXY_VERSION="2.1.0"
 
 download_external_package \
-    "https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_VERSION}/proxmox-termproxy_2.1.0_arm64.deb"
+    "https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_VERSION}/proxmox-backup-client_${PBS_CLIENT_VERSION}_arm64.deb"
+
+download_external_package \
+    "https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_VERSION}/proxmox-mini-journalreader_${JOURNALREADER_VERSION}_arm64.deb"
+
+download_external_package \
+    "https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_VERSION}/proxmox-termproxy_${TERMPROXY_VERSION}_arm64.deb"
 
 PMG_LOG_TRACKER_CONSTRAINT=$(get_dependency_constraint "${PMG_META_DEB}" pmg-log-tracker || true)
 PMG_LOG_TRACKER_VERSION=$(package_version pmg-log-tracker amd64 "$(dependency_operator "${PMG_LOG_TRACKER_CONSTRAINT}")" "$(dependency_version "${PMG_LOG_TRACKER_CONSTRAINT}")")

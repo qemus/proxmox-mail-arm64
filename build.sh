@@ -263,6 +263,7 @@ function dependency_package_version() {
 	package_version "${package}" "${arch}" "${operator}" "${version}"
 }
 
+
 function build_libpmg_rs_perl() {
 	version=${1}
 
@@ -278,18 +279,34 @@ function build_libpmg_rs_perl() {
 	git clean -ffdx
 	git reset --hard
 
-    if [ -f debian/control ]; then
-	    set_package_info
-    fi
+	build_dir="$(
+		find . -path '*/debian/control' -print |
+			while read -r control; do
+				if grep -q '^Package: libpmg-rs-perl$' "${control}"; then
+					dir=${control%/debian/control}
+					echo "${dir}"
+					break
+				fi
+			done
+	)"
+
+	if [ -z "${build_dir}" ]; then
+		echo "Could not find Debian packaging for libpmg-rs-perl" >&2
+		exit 1
+	fi
+
+	cd "${build_dir}"
+
+	set_package_info
 
 	${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
 
 	dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
 
-	cd ..
+	cd ../..
 
-	mv -f proxmox-perl-rs/libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb "${PACKAGES}/"
-	mv -f proxmox-perl-rs/libpmg-rs-perl-dbgsym_${version}_${PACKAGE_ARCH}.deb "${PACKAGES}/" 2>/dev/null || true
+	mv -f proxmox-perl-rs/*.deb "${PACKAGES}/" 2>/dev/null || true
+	mv -f proxmox-perl-rs/*/*.deb "${PACKAGES}/" 2>/dev/null || true
 }
 
 function prepare_pmg_log_tracker() {

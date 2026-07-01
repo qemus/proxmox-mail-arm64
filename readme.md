@@ -25,9 +25,10 @@ With the script you can also download or install all packages of the latest rele
 ### Install build prerequisites
 
 ```bash
-apt-get install -y --no-install-recommends \
-    build-essential ca-certificates curl git jq lintian sudo pkg-config \
-    libssl-dev libapt-pkg-dev nettle-dev clang libclang-dev
+apt-get update && apt-get install -y --no-install-recommends \
+    build-essential ca-certificates curl devscripts dpkg-dev \
+    equivs faketime git lintian pkg-config rsync sudo jq \
+    dh-cargo libssl-dev libapt-pkg-dev nettle-dev clang libclang-dev
 ```
 
 ### Install `rustup`

@@ -14,11 +14,11 @@ With the script you can also download or install all packages of the latest rele
 
 **Download and install**
 
-`./build.sh install` or a specific version `./build.sh install=9.1`
+`./build.sh install` or a specific version `./build.sh install=9.1.0`
 
 **Download only**
 
-`./build.sh download` or a specific version `./build.sh download=9.1`
+`./build.sh download` or a specific version `./build.sh download=9.1.0`
 
 ## Build manually
 

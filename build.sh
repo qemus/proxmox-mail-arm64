@@ -729,20 +729,20 @@ if [ -z "${PERLMOD_VERSION}" ]; then
 	exit 1
 fi
 
-echo "Download perlmod-bin ${PERLMOD_VERSION}"
-download_package perlmod-bin all "${PACKAGES}" ">=" "${PERLMOD_VERSION}"
+echo "Install perlmod-bin ${PERLMOD_VERSION}"
+${SUDO} apt-get install -y perlmod-bin
 
-PERLMOD_BIN_DEB="$(find_package_file perlmod-bin)"
+INSTALLED_PERLMOD_VERSION="$(dpkg-query -W -f='${Version}' perlmod-bin 2>/dev/null || true)"
 
-if [ -z "${PERLMOD_BIN_DEB}" ]; then
-	echo "Could not find downloaded perlmod-bin package" >&2
+if [ -z "${INSTALLED_PERLMOD_VERSION}" ]; then
+	echo "Could not install perlmod-bin" >&2
 	exit 1
 fi
 
-${SUDO} apt-get install -y "${PERLMOD_BIN_DEB}"
-
-# perlmod-bin is only needed during the build.
-rm -f "${PERLMOD_BIN_DEB}"
+if ! dpkg --compare-versions "${INSTALLED_PERLMOD_VERSION}" ge "${PERLMOD_VERSION}"; then
+	echo "Installed perlmod-bin ${INSTALLED_PERLMOD_VERSION} is older than required ${PERLMOD_VERSION}" >&2
+	exit 1
+fi
 
 echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
 build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"

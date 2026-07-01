@@ -82,6 +82,7 @@ function set_package_info() {
 		sed -i "s#^Maintainer:.*#Maintainer: Github Action <no-reply@github.com>#" debian/control
 		sed -i "s#^Homepage:.*#Homepage: https://github.com/qemus/proxmox-mail-arm64#" debian/control
 	else
+		sed -i '\#^Origin: https://github.com/qemus/proxmox-mail-arm64$#d' debian/control
 		sed -i "s#^\(Maintainer.*\)\$#\1\nOrigin: https://github.com/qemus/proxmox-mail-arm64#" debian/control
 	fi
 }
@@ -239,10 +240,10 @@ function prepare_pmg_log_tracker() {
 	rm -f .cargo/config .cargo/config.toml
 
 	mkdir -p .cargo
-	cat > .cargo/config.toml <<'EOF'
+	cat > .cargo/config.toml <<'EOF_CARGO_CONFIG'
 [source.crates-io]
 registry = "https://github.com/rust-lang/crates.io-index"
-EOF
+EOF_CARGO_CONFIG
 
 	PROXMOX_TIME_PATH="$(find ./proxmox -maxdepth 4 -path '*/proxmox-time/Cargo.toml' -print -quit)"
 	PROXMOX_TIME_PATH="${PROXMOX_TIME_PATH%/Cargo.toml}"
@@ -252,13 +253,19 @@ EOF
 		exit 1
 	fi
 
-	cat >> Cargo.toml <<EOF
+	if ! grep -q '^\[patch.crates-io\]' Cargo.toml; then
+		cat >> Cargo.toml <<EOF_PATCH
 
 [patch.crates-io]
 proxmox-time = { path = "${PROXMOX_TIME_PATH}" }
-EOF
+EOF_PATCH
+	elif ! grep -q '^proxmox-time[[:space:]]*=' Cargo.toml; then
+		cat >> Cargo.toml <<EOF_PATCH
+proxmox-time = { path = "${PROXMOX_TIME_PATH}" }
+EOF_PATCH
+	fi
 
-	cat > debian/rules <<'EOF'
+	cat > debian/rules <<'EOF_RULES'
 #!/usr/bin/make -f
 
 %:
@@ -269,7 +276,7 @@ override_dh_auto_build:
 
 override_dh_auto_install:
 	install -Dm755 target/release/pmg-log-tracker debian/pmg-log-tracker/usr/bin/pmg-log-tracker
-EOF
+EOF_RULES
 
 	chmod +x debian/rules
 
@@ -287,9 +294,9 @@ EOF
 }
 
 function prepare_proxmox_spamassassin() {
-    sed -i "s/_amd64\.deb/_${PACKAGE_ARCH}.deb/g" Makefile
-    sed -i "s/_amd64\.changes/_${PACKAGE_ARCH}.changes/g" Makefile
-    sed -i "s/_amd64\.buildinfo/_${PACKAGE_ARCH}.buildinfo/g" Makefile
+	sed -i "s/_amd64\.deb/_${PACKAGE_ARCH}.deb/g" Makefile
+	sed -i "s/_amd64\.changes/_${PACKAGE_ARCH}.changes/g" Makefile
+	sed -i "s/_amd64\.buildinfo/_${PACKAGE_ARCH}.buildinfo/g" Makefile
 }
 
 function prepare_package() {
@@ -378,8 +385,8 @@ function download_release() {
 		curl -sSfL "${release_url}" |
 			jq -r '
 				.assets[]
-                | select(.name | test("static|dbgsym") | not)
-                | .browser_download_url
+				| select(.name | test("static|dbgsym") | not)
+				| .browser_download_url
 			'
 	)
 
@@ -397,9 +404,9 @@ function download_release() {
 			echo "Downloading ${file}"
 			curl -sSfL "${download_url}" -o "${PACKAGES}/${file}"
 		fi
-	
-        [[ "$file" == *"dbgsym"* ]] && rm "${PACKAGES}/${file}" && continue
-	
+
+		[[ "$file" == *"dbgsym"* ]] && rm "${PACKAGES}/${file}" && continue
+
 		file_list+=("${PACKAGES}/${file}")
 	done
 }
@@ -526,6 +533,16 @@ PMG_LOG_TRACKER_VERSION=$(package_version pmg-log-tracker amd64 "$(dependency_op
 
 PROXMOX_SPAMASSASSIN_CONSTRAINT=$(get_dependency_constraint "${PMG_META_DEB}" proxmox-spamassassin || true)
 PROXMOX_SPAMASSASSIN_VERSION=$(package_version proxmox-spamassassin amd64 "$(dependency_operator "${PROXMOX_SPAMASSASSIN_CONSTRAINT}")" "$(dependency_version "${PROXMOX_SPAMASSASSIN_CONSTRAINT}")")
+
+if [ -z "${PMG_LOG_TRACKER_VERSION}" ]; then
+	echo "Could not resolve pmg-log-tracker version" >&2
+	exit 1
+fi
+
+if [ -z "${PROXMOX_SPAMASSASSIN_VERSION}" ]; then
+	echo "Could not resolve proxmox-spamassassin version" >&2
+	exit 1
+fi
 
 echo "Build pmg-log-tracker ${PMG_LOG_TRACKER_VERSION}"
 build_dpkg_package \

@@ -26,8 +26,8 @@ With the script you can also download or install all packages of the latest rele
 
 ```bash
 apt-get install -y --no-install-recommends \
-    build-essential ca-certificates curl \
-    git jq lintian sudo
+    build-essential ca-certificates curl git jq lintian sudo pkg-config \
+    libssl-dev libapt-pkg-dev nettle-dev clang libclang-dev
 ```
 
 ### Install `rustup`

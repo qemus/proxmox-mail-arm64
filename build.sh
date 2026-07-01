@@ -500,76 +500,95 @@ path.write_text("\n".join(out) + "\n")
 EOF_PATCH_RULES
 	fi
 
-	PERLMOD_CRATE_PATH="$(find_cargo_package_path "${SOURCES}/perlmod" perlmod || true)"
-	PERLMOD_MACRO_CRATE_PATH="$(find_cargo_package_path "${SOURCES}/perlmod" perlmod-macro || true)"
-	PROXMOX_ACME_CRATE_PATH="$(find_cargo_package_path "${SOURCES}/proxmox" proxmox-acme || true)"
-
-	if [ -z "${PERLMOD_CRATE_PATH}" ]; then
-		echo "Could not find local perlmod Rust crate" >&2
-		exit 1
-	fi
-
-	if [ -z "${PROXMOX_ACME_CRATE_PATH}" ]; then
-		echo "Could not find local proxmox-acme Rust crate" >&2
-		exit 1
-	fi
-
-	# Add local path patches for Proxmox crates that are not available on crates.io.
-	# Do not use grep for this, because dependency lines under [dependencies]
-	# have the same names and would cause false matches.
-	python3 - "${PERLMOD_CRATE_PATH}" "${PERLMOD_MACRO_CRATE_PATH}" "${PROXMOX_ACME_CRATE_PATH}" <<'EOF_PATCH_CARGO'
+	# Generate one complete [patch.crates-io] section from the local Proxmox
+	# Rust repos. This avoids discovering missing crates one build at a time.
+	python3 - "${SOURCES}/perlmod" "${SOURCES}/proxmox" <<'EOF_PATCH_CARGO'
 from pathlib import Path
+import re
 import sys
 
-perlmod_path = sys.argv[1]
-perlmod_macro_path = sys.argv[2]
-proxmox_acme_path = sys.argv[3]
+cargo_toml = Path("Cargo.toml")
+roots = [Path(arg) for arg in sys.argv[1:]]
 
-path = Path("Cargo.toml")
-lines = path.read_text().splitlines()
+def package_name_from_cargo_toml(path):
+    in_package = False
 
-patches = {
-    "perlmod": perlmod_path,
-    "proxmox-acme": proxmox_acme_path,
-}
+    for line in path.read_text(errors="ignore").splitlines():
+        stripped = line.strip()
 
-if perlmod_macro_path:
-    patches["perlmod-macro"] = perlmod_macro_path
+        if stripped == "[package]":
+            in_package = True
+            continue
 
+        if in_package and stripped.startswith("[") and stripped.endswith("]"):
+            return None
+
+        if in_package:
+            match = re.match(r'name\s*=\s*"([^"]+)"', stripped)
+            if match:
+                return match.group(1)
+
+    return None
+
+patches = {}
+
+for root in roots:
+    if not root.exists():
+        continue
+
+    for path in root.rglob("Cargo.toml"):
+        name = package_name_from_cargo_toml(path)
+        if not name:
+            continue
+
+        # Keep the first match. Duplicate names should not normally happen,
+        # but this avoids unstable output if they do.
+        patches.setdefault(name, str(path.parent.resolve()))
+
+required = [
+    "perlmod",
+    "perlmod-macro",
+    "proxmox-acme",
+    "proxmox-apt",
+]
+
+missing = [name for name in required if name not in patches]
+if missing:
+    raise SystemExit("Missing local Rust crate path(s): " + ", ".join(missing))
+
+lines = cargo_toml.read_text().splitlines()
 out = []
-in_patch_crates_io = False
+skip_patch_section = False
 
 for line in lines:
     stripped = line.strip()
 
-    if stripped.startswith("[") and stripped.endswith("]"):
-        in_patch_crates_io = stripped == "[patch.crates-io]"
-        out.append(line)
+    if stripped == "[patch.crates-io]":
+        skip_patch_section = True
         continue
 
-    if in_patch_crates_io:
-        key = stripped.split("=", 1)[0].strip()
-        if key in patches:
-            continue
+    if skip_patch_section:
+        if stripped.startswith("[") and stripped.endswith("]"):
+            skip_patch_section = False
+            out.append(line)
+        continue
 
     out.append(line)
 
-text = "\n".join(out).rstrip() + "\n"
+text = "\n".join(out).rstrip()
+text += "\n\n[patch.crates-io]\n"
 
-if "[patch.crates-io]" not in text:
-    text += "\n[patch.crates-io]\n"
+for name in sorted(patches):
+    text += f'{name} = {{ path = "{patches[name]}" }}\n'
 
-for name, crate_path in patches.items():
-    text += f'{name} = {{ path = "{crate_path}" }}\n'
-
-path.write_text(text)
+cargo_toml.write_text(text)
 EOF_PATCH_CARGO
 
 	echo "Cargo patches for libpmg-rs-perl:"
 	awk '
 		/^\[patch.crates-io\]/ { show=1 }
 		show { print }
-		show && /^\[/ && $0 !~ /^\[patch.crates-io\]/ { show=0 }
+		show && NR > 1 && /^\[/ && $0 !~ /^\[patch.crates-io\]/ { show=0 }
 	' Cargo.toml
 
 	if [ -f debian/control ]; then

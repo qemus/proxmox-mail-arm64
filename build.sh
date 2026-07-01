@@ -580,9 +580,9 @@ LIBXDGMIME_PERL_VERSION="$(dependency_package_version "${PMG_API_DEB}" libxdgmim
 PMG_MOBILE_QUARANTINE_UI_VERSION="$(dependency_package_version "${PMG_API_DEB}" pmg-mobile-quarantine-ui amd64)"
 
 echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
-build_make_deb_package \
-	https://git.proxmox.com/git/proxmox-perl-rs.git \
-	proxmox-perl-rs \
+build_dpkg_package \
+	https://git.proxmox.com/git/pmg-rs.git \
+	pmg-rs \
 	"${LIBPMG_RS_PERL_VERSION}"
 
 echo "Build libxdgmime-perl ${LIBXDGMIME_PERL_VERSION}"

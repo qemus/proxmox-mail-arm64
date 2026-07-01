@@ -358,10 +358,10 @@ function build_perlmod() {
 		return 0
 	fi
 
-	git_clone_or_fetch https://git.proxmox.com/git/perlmod-rs.git
-	git_checkout_subdir_version perlmod-rs proxmox "${version}"
+	git_clone_or_fetch https://git.proxmox.com/git/perlmod.git
+	git_checkout_version perlmod "${version}"
 
-	cd perlmod-rs/proxmox
+	cd perlmod
 
 	sed -i '/librust-/d' debian/control
 
@@ -371,10 +371,10 @@ function build_perlmod() {
 
 	dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
 
-	cd ../..
+	cd ..
 
-	find perlmod-rs -maxdepth 2 -name "perlmod-bin_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \;
-	find perlmod-rs -maxdepth 2 -name "perlmod-bin-dbgsym_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \; 2>/dev/null || true
+	find perlmod -maxdepth 1 -name "perlmod-bin_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \;
+	find perlmod -maxdepth 1 -name "perlmod-bin-dbgsym_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \; 2>/dev/null || true
 
 	if ! compgen -G "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
 		echo "Could not find built perlmod-bin package for version ${version}" >&2

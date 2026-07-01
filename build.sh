@@ -278,7 +278,9 @@ function build_libpmg_rs_perl() {
 	git clean -ffdx
 	git reset --hard
 
-	set_package_info
+    if [ -f debian/control ]; then
+	    set_package_info
+    fi
 
 	${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
 

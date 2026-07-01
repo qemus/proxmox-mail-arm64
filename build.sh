@@ -1066,12 +1066,12 @@ if [ -z "${PERLMOD_VERSION}" ]; then
 fi
 
 echo "Build perlmod ${PERLMOD_VERSION}"
-build_perlmod "${PERLMOD_VERSION}"
+#build_perlmod "${PERLMOD_VERSION}"
 
 git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
 
 echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
-build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"
+#build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"
 
 echo "Build libxdgmime-perl ${LIBXDGMIME_PERL_VERSION}"
 build_make_deb_package \
@@ -1089,8 +1089,9 @@ PMG_MOBILE_QUARANTINE_UI_DEB="${PACKAGES}/pmg-mobile-quarantine-ui_${PMG_MOBILE_
 echo "Download pmg-yew-quarantine-i18n dependency"
 download_dependency_package "${PMG_MOBILE_QUARANTINE_UI_DEB}" pmg-yew-quarantine-i18n all
 
-echo "Repackage libarchive-perl ${LIBARCHIVE_PERL_VERSION}"
-repackage_static_package_as_arch \
+echo "Build libarchive-perl ${LIBARCHIVE_PERL_VERSION}"
+build_dpkg_package \
+	https://git.proxmox.com/git/libarchive-perl.git \
 	libarchive-perl \
 	"${LIBARCHIVE_PERL_VERSION}"
 

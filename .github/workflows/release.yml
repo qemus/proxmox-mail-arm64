@@ -25,7 +25,7 @@ jobs:
           while read -r v; do {
             [ -z "$latest_tag" ] || dpkg --compare-versions "$v" gt "$latest_tag"; } && latest_tag="$v"
           done < <(curl -fsSL http://download.proxmox.com/debian/pmg/dists/trixie/pmg-no-subscription/binary-amd64/Packages.gz | \
-                   gzip -dc | awk '/^Package: proxmox-mailgateway$/ {f=1; next} f && /^Version:/ {print $2; f=0}')
+                   gzip -dc | awk '/^Package: pmg-api$/ {f=1; next} f && /^Version:/ {print $2; f=0}')
           
           latest_tag="${latest_tag%-*}"
           echo "Found tag: \"${latest_tag}\""
@@ -75,9 +75,10 @@ jobs:
           echo "DEB_DIST=Debian/Trixie" >> $GITHUB_ENV
           docker buildx build -o packages --build-arg buildoptions="github=${{ env.latest_tag }}" --build-arg baseimage=${baseimage} --platform=linux/arm64 -f Dockerfile .
           sudo apt -y install apt-listchanges
-          apt-listchanges --latest=1 -f text packages/proxmox-mailgateway_*.deb | sed -e '/^\(apt-listchanges.*\|[-]\+\)$/d' >> .github/PREBUILD.md
-          echo "DEB_VERSION=$(dpkg --info packages/proxmox-mailgateway_*.deb | sed -n '/Version/ s/[^:]\+: //p')" >> $GITHUB_ENV
-          echo "DEB_VERSION_UPSTREAM=$(dpkg --info packages/proxmox-mailgateway_*.deb | sed -n '/Version/ s/[^:]\+: \([0-9.]\+\)-[0-9]/\1/p')" >> $GITHUB_ENV
+          apt-listchanges --latest=1 -f text packages/pmg-api_*.deb |
+          sed -e '/^\(apt-listchanges.*\|[-]\+\)$/d' >> .github/PREBUILD.md
+          echo "DEB_VERSION=$(dpkg --info packages/pmg-api_*.deb | sed -n '/Version/ s/[^:]\+: //p')" >> "$GITHUB_ENV"
+          echo "DEB_VERSION_UPSTREAM=$(dpkg --info packages/pmg-api_*.deb | sed -n '/Version/ s/[^:]\+: \([0-9.]\+\)-\?[0-9]*/\1/p')" >> "$GITHUB_ENV"
       -
         name: Release packages
         if: env.exists == 'false'

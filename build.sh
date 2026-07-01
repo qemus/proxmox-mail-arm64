@@ -415,14 +415,22 @@ function download_release() {
 }
 
 function install_server() {
-	if [ "${#file_list[@]}" -eq 0 ]; then
-		echo "Error: no files found to install" >&2
-		return 1
-	fi
+    if [ "${#file_list[@]}" -eq 0 ]; then
+        echo "Error: no files found to install" >&2
+        return 1
+    fi
 
-	if ${SUDO} apt-get install -y "${file_list[@]}"; then
-		rm -f -- "${file_list[@]}"
-	fi
+    if is_container; then
+        rm -f "${PACKAGES}"/proxmox-mailgateway_*.deb
+    else
+        rm -f "${PACKAGES}"/proxmox-mailgateway-container_*.deb
+    fi
+
+    mapfile -t file_list < <(find "${PACKAGES}" -maxdepth 1 -name '*.deb' -print | sort)
+
+    if ${SUDO} apt-get install -y "${file_list[@]}"; then
+        rm -f -- "${file_list[@]}"
+    fi
 }
 
 SUDO="${SUDO:-sudo -E}"

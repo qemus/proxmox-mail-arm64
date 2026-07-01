@@ -582,14 +582,18 @@ download_dependency_package "${PMG_GUI_DEB}" proxmox-widget-toolkit all
 download_dependency_package "${PMG_DOCS_DEB}" libjs-extjs all
 download_dependency_package "${PMG_API_DEB}" pve-xtermjs all
 
-download_external_package \
-    "https://github.com/qemus/proxmox-backup-arm64/releases/download/4.2.2/proxmox-backup-client_4.2.2-1_arm64.deb"
+PBS_CONSTRAINT=$(get_dependency_constraint "${PMG_META_DEB}" proxmox-backup-client || true)
+PBS_VERSION=$(dependency_version "${PBS_CONSTRAINT}")
+PBS_VERSION=${PBS_VERSION%-*}    # strip Debian revision if present
 
 download_external_package \
-    "https://github.com/qemus/proxmox-backup-arm64/releases/download/4.2.2/proxmox-mini-journalreader_1.6-1_arm64.deb"
+    "https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_VERSION}/proxmox-backup-client_${PBS_VERSION}-1_arm64.deb"
+	
+download_external_package \
+    "https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_VERSION}/proxmox-mini-journalreader_1.6-1_arm64.deb"
 
 download_external_package \
-    "https://github.com/qemus/proxmox-backup-arm64/releases/download/4.2.2/proxmox-termproxy_2.1.0_arm64.deb"
+    "https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_VERSION}/proxmox-termproxy_2.1.0_arm64.deb"
 
 PMG_LOG_TRACKER_CONSTRAINT=$(get_dependency_constraint "${PMG_META_DEB}" pmg-log-tracker || true)
 PMG_LOG_TRACKER_VERSION=$(package_version pmg-log-tracker amd64 "$(dependency_operator "${PMG_LOG_TRACKER_CONSTRAINT}")" "$(dependency_version "${PMG_LOG_TRACKER_CONSTRAINT}")")

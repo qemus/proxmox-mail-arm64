@@ -148,8 +148,7 @@ function load_packages() {
 					version=""
 					arch=""
 					filename=""
-				} else if ($1 == "Version"
-				) {
+				} else if ($1 == "Version") {
 					version=$2
 				} else if ($1 == "Architecture") {
 					arch=$2
@@ -360,9 +359,9 @@ function build_perlmod() {
 	fi
 
 	git_clone_or_fetch https://git.proxmox.com/git/perlmod-rs.git
-	git_checkout_version perlmod-rs "${version}"
+	git_checkout_subdir_version perlmod-rs proxmox "${version}"
 
-	cd perlmod-rs
+	cd perlmod-rs/proxmox
 
 	sed -i '/librust-/d' debian/control
 
@@ -372,10 +371,15 @@ function build_perlmod() {
 
 	dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
 
-	cd ..
+	cd ../..
 
-	mv -f perlmod-bin_${version}_${PACKAGE_ARCH}.deb "${PACKAGES}/"
-	mv -f perlmod-bin-dbgsym_${version}_${PACKAGE_ARCH}.deb "${PACKAGES}/" 2>/dev/null || true
+	find perlmod-rs -maxdepth 2 -name "perlmod-bin_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \;
+	find perlmod-rs -maxdepth 2 -name "perlmod-bin-dbgsym_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \; 2>/dev/null || true
+
+	if ! compgen -G "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
+		echo "Could not find built perlmod-bin package for version ${version}" >&2
+		exit 1
+	fi
 
 	${SUDO} apt-get install -y "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb"
 }
@@ -401,8 +405,13 @@ function build_libpmg_rs_perl() {
 
 	cd ../..
 
-	find proxmox-perl-rs -maxdepth 2 -name "libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \;
+    find proxmox-perl-rs -maxdepth 2 -name "libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \;
 	find proxmox-perl-rs -maxdepth 2 -name "libpmg-rs-perl-dbgsym_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \; 2>/dev/null || true
+
+	if ! compgen -G "${PACKAGES}/libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
+		echo "Could not find built libpmg-rs-perl package for version ${version}" >&2
+		exit 1
+	fi
 }
 
 function prepare_pmg_log_tracker() {
@@ -754,8 +763,6 @@ if [ -z "${PERLMOD_VERSION}" ]; then
 	exit 1
 fi
 
-cd ..
-
 echo "Build perlmod ${PERLMOD_VERSION}"
 build_perlmod "${PERLMOD_VERSION}"
 
@@ -795,6 +802,11 @@ download_dependency_package "${PMG_DOCS_DEB}" libjs-extjs all
 download_dependency_package "${PMG_API_DEB}" pve-xtermjs all
 
 PBS_CONSTRAINT=$(get_dependency_constraint "${PMG_API_DEB}" proxmox-backup-client || true)
+
+if [ -z "${PBS_CONSTRAINT}" ]; then
+	PBS_CONSTRAINT=$(get_dependency_constraint "${PMG_META_DEB}" proxmox-backup-client || true)
+fi
+
 PBS_VERSION=$(dependency_version "${PBS_CONSTRAINT}")
 PBS_VERSION=${PBS_VERSION%-*}    # strip Debian revision if present
 

@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsystemd-dev \
     uuid-dev \
 	binutils \
+	libarchive-dev \
 	&& rm -rf /var/lib/apt/lists/*
 
 ENV RUSTUP_TOOLCHAIN=stable

@@ -264,22 +264,34 @@ function dependency_package_version() {
 }
 
 function build_libpmg_rs_perl() {
-    version=${1}
+	version=${1}
 
-    git_clone_or_fetch https://git.proxmox.com/git/proxmox-perl-rs.git
+	if compgen -G "${PACKAGES}/libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
+		echo "libpmg-rs-perl up-to-date"
+		return 0
+	fi
 
-    cd proxmox-perl-rs
+	git_clone_or_fetch https://git.proxmox.com/git/proxmox-perl-rs.git
 
-    git clean -ffdx
-    git reset --hard
+	cd proxmox-perl-rs
 
-    echo "Available Debian packaging:"
-    find . -path '*/debian/control' -print
+	git clean -ffdx
+	git reset --hard
 
-    echo "Locations mentioning libpmg-rs-perl:"
-    grep -R "Package: libpmg-rs-perl" -n . || true
+	cd pmg-rs
 
-    exit 1
+	sed -i '/librust-/d; /perlmod-bin/d' debian/control
+
+	if [ -f debian/control ]; then
+		set_package_info
+	fi
+
+	dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
+
+	cd ../..
+
+	mv -f proxmox-perl-rs/libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb "${PACKAGES}/"
+	mv -f proxmox-perl-rs/libpmg-rs-perl-dbgsym_${version}_${PACKAGE_ARCH}.deb "${PACKAGES}/" 2>/dev/null || true
 }
 
 function prepare_pmg_log_tracker() {

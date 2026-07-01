@@ -26,7 +26,7 @@ ENV RUSTUP_INIT_SKIP_PATH_CHECK=yes
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-RUN rustup default stable
+RUN . "$HOME/.cargo/env" && rustup default stable
 
 RUN curl -fsSL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
 	-o /usr/share/keyrings/proxmox-archive-keyring.gpg

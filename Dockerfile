@@ -25,6 +25,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nettle-dev \
     clang \
     libclang-dev \
+    libsystemd-dev \
+    uuid-dev
 	&& rm -rf /var/lib/apt/lists/*
 
 ENV RUSTUP_TOOLCHAIN=stable

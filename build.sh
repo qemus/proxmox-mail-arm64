@@ -393,7 +393,7 @@ HOST_SYSTEM=$(dpkg-architecture -q DEB_HOST_GNU_SYSTEM)
 BUILD_PACKAGE="server"
 BUILD_PROFILES=""
 GITHUB_ACTION=""
-PMG_VERSION="${PMG_VERSION:-9.1}"
+PMG_VERSION="${PMG_VERSION:-9.1.0}"
 
 export DEB_HOST_RUST_TYPE=${HOST_CPU}-unknown-${HOST_SYSTEM}
 
@@ -458,20 +458,32 @@ while [ "$#" -ge 1 ]; do
 done
 
 [ -n "${BUILD_PROFILES}" ] && BUILD_PROFILES="--build-profiles=${BUILD_PROFILES#,}"
+
 if [[ ! " ${DEB_BUILD_OPTIONS:-} " =~ " nocheck " ]]; then
     export DEB_BUILD_OPTIONS="${DEB_BUILD_OPTIONS:+${DEB_BUILD_OPTIONS} }nocheck"
 fi
 
 echo "Download package list from PMG repository"
+
 PACKAGES_PMG=$(load_packages http://download.proxmox.com/debian/pmg/dists/trixie/pmg-no-subscription/binary-amd64/Packages.gz)
+PMG_META_VERSION="${PMG_VERSION}"
+
+while ! select_package proxmox-mailgateway all | grep -q "proxmox-mailgateway_${PMG_META_VERSION}_"; do
+    PMG_META_VERSION="${PMG_META_VERSION%.*}"
+
+    if [ -z "${PMG_META_VERSION}" ] || [ "${PMG_META_VERSION}" = "${PMG_VERSION}" ]; then
+        echo "Could not resolve proxmox-mailgateway version for ${PMG_VERSION}" >&2
+        exit 1
+    fi
+done
 
 cd "${SOURCES}"
 
-echo "Build proxmox-mailgateway ${PMG_VERSION}"
+echo "Build proxmox-mailgateway ${PMG_META_VERSION}"
 build_make_deb_package \
-	https://git.proxmox.com/git/proxmox-mailgateway.git \
-	proxmox-mailgateway \
-	"${PMG_VERSION}"
+    https://git.proxmox.com/git/proxmox-mailgateway.git \
+    proxmox-mailgateway \
+    "${PMG_META_VERSION}"
 
 echo "Download architecture-independent PMG packages"
 download_package pmg-api all

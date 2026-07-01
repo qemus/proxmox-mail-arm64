@@ -263,50 +263,23 @@ function dependency_package_version() {
 	package_version "${package}" "${arch}" "${operator}" "${version}"
 }
 
-
 function build_libpmg_rs_perl() {
-	version=${1}
+    version=${1}
 
-	if compgen -G "${PACKAGES}/libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
-		echo "libpmg-rs-perl up-to-date"
-		return 0
-	fi
+    git_clone_or_fetch https://git.proxmox.com/git/proxmox-perl-rs.git
 
-	git_clone_or_fetch https://git.proxmox.com/git/proxmox-perl-rs.git
+    cd proxmox-perl-rs
 
-	cd proxmox-perl-rs
+    git clean -ffdx
+    git reset --hard
 
-	git clean -ffdx
-	git reset --hard
+    echo "Available Debian packaging:"
+    find . -path '*/debian/control' -print
 
-	build_dir="$(
-		find . -path '*/debian/control' -print |
-			while read -r control; do
-				if grep -q '^Package: libpmg-rs-perl$' "${control}"; then
-					dir=${control%/debian/control}
-					echo "${dir}"
-					break
-				fi
-			done
-	)"
+    echo "Locations mentioning libpmg-rs-perl:"
+    grep -R "Package: libpmg-rs-perl" -n . || true
 
-	if [ -z "${build_dir}" ]; then
-		echo "Could not find Debian packaging for libpmg-rs-perl" >&2
-		exit 1
-	fi
-
-	cd "${build_dir}"
-
-	set_package_info
-
-	${SUDO} apt-get -y build-dep ${BUILD_PROFILES} .
-
-	dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
-
-	cd ../..
-
-	mv -f proxmox-perl-rs/*.deb "${PACKAGES}/" 2>/dev/null || true
-	mv -f proxmox-perl-rs/*/*.deb "${PACKAGES}/" 2>/dev/null || true
+    exit 1
 }
 
 function prepare_pmg_log_tracker() {

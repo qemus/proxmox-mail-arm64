@@ -972,7 +972,7 @@ build_make_deb_package \
 
 echo "Build pmg-mobile-quarantine-ui ${PMG_MOBILE_QUARANTINE_UI_VERSION}"
 build_make_deb_package \
-	https://git.proxmox.com/git/pmg-yew-quarantine-gui.git \
+	https://github.com/proxmox/pmg-yew-quarantine-gui.git \
 	pmg-yew-quarantine-gui \
 	"${PMG_MOBILE_QUARANTINE_UI_VERSION}" \
 	pmg-mobile-quarantine-ui

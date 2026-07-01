@@ -345,18 +345,6 @@ override_dh_auto_install:
 EOF_RULES
 
 	chmod +x debian/rules
-
-	if command -v rustup >/dev/null 2>&1; then
-		export PATH="$HOME/.cargo/bin:$PATH"
-
-		if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
-			rustup show >/dev/null
-		else
-			echo "No rust-toolchain file found, using default rustup toolchain"
-			export RUSTUP_TOOLCHAIN=stable
-			rustup default stable
-		fi
-	fi
 }
 
 function prepare_proxmox_spamassassin() {

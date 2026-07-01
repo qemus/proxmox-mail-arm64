@@ -87,5 +87,5 @@ You can add the debug option to redirect the complete build process output also 
 [release_url]: https://github.com/qemus/proxmox-mail-arm64/releases/
 
 [Build]: https://github.com/qemus/proxmox-mail-arm64/actions/workflows/release.yml/badge.svg
-[Size]: https://img.shields.io/badge/size-20.3_MB-steelblue?style=flat&color=066da5
+[Size]: https://img.shields.io/badge/size-18.4_MB-steelblue?style=flat&color=066da5
 [Version]: https://img.shields.io/github/v/tag/qemus/proxmox-mail-arm64?label=version&sort=semver&color=066da5

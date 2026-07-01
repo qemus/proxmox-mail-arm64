@@ -514,30 +514,63 @@ EOF_PATCH_RULES
 		exit 1
 	fi
 
-	if ! grep -q '^\[patch.crates-io\]' Cargo.toml; then
-		cat >> Cargo.toml <<EOF_PATCH
+	# Add local path patches for Proxmox crates that are not available on crates.io.
+	# Do not use grep for this, because dependency lines under [dependencies]
+	# have the same names and would cause false matches.
+	python3 - "${PERLMOD_CRATE_PATH}" "${PERLMOD_MACRO_CRATE_PATH}" "${PROXMOX_ACME_CRATE_PATH}" <<'EOF_PATCH_CARGO'
+from pathlib import Path
+import sys
 
-[patch.crates-io]
-EOF_PATCH
-	fi
+perlmod_path = sys.argv[1]
+perlmod_macro_path = sys.argv[2]
+proxmox_acme_path = sys.argv[3]
 
-	if ! grep -q '^perlmod[[:space:]]*=' Cargo.toml; then
-		cat >> Cargo.toml <<EOF_PATCH
-perlmod = { path = "${PERLMOD_CRATE_PATH}" }
-EOF_PATCH
-	fi
+path = Path("Cargo.toml")
+lines = path.read_text().splitlines()
 
-	if [ -n "${PERLMOD_MACRO_CRATE_PATH}" ] && ! grep -q '^perlmod-macro[[:space:]]*=' Cargo.toml; then
-		cat >> Cargo.toml <<EOF_PATCH
-perlmod-macro = { path = "${PERLMOD_MACRO_CRATE_PATH}" }
-EOF_PATCH
-	fi
+patches = {
+    "perlmod": perlmod_path,
+    "proxmox-acme": proxmox_acme_path,
+}
 
-	if ! grep -q '^proxmox-acme[[:space:]]*=' Cargo.toml; then
-		cat >> Cargo.toml <<EOF_PATCH
-proxmox-acme = { path = "${PROXMOX_ACME_CRATE_PATH}" }
-EOF_PATCH
-	fi
+if perlmod_macro_path:
+    patches["perlmod-macro"] = perlmod_macro_path
+
+out = []
+in_patch_crates_io = False
+
+for line in lines:
+    stripped = line.strip()
+
+    if stripped.startswith("[") and stripped.endswith("]"):
+        in_patch_crates_io = stripped == "[patch.crates-io]"
+        out.append(line)
+        continue
+
+    if in_patch_crates_io:
+        key = stripped.split("=", 1)[0].strip()
+        if key in patches:
+            continue
+
+    out.append(line)
+
+text = "\n".join(out).rstrip() + "\n"
+
+if "[patch.crates-io]" not in text:
+    text += "\n[patch.crates-io]\n"
+
+for name, crate_path in patches.items():
+    text += f'{name} = {{ path = "{crate_path}" }}\n'
+
+path.write_text(text)
+EOF_PATCH_CARGO
+
+	echo "Cargo patches for libpmg-rs-perl:"
+	awk '
+		/^\[patch.crates-io\]/ { show=1 }
+		show { print }
+		show && /^\[/ && $0 !~ /^\[patch.crates-io\]/ { show=0 }
+	' Cargo.toml
 
 	if [ -f debian/control ]; then
 		set_package_info

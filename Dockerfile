@@ -22,11 +22,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 	dh-cargo \
 	&& rm -rf /var/lib/apt/lists/*
 
+ENV RUSTUP_TOOLCHAIN=stable
 ENV RUSTUP_INIT_SKIP_PATH_CHECK=yes
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-RUN . "$HOME/.cargo/env" && rustup default stable
+RUN rustup toolchain install stable && rustup default stable
 
 RUN curl -fsSL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
 	-o /usr/share/keyrings/proxmox-archive-keyring.gpg
@@ -41,7 +42,7 @@ WORKDIR /build
 SHELL ["/bin/bash", "-c"]
 
 RUN chmod +x ./build.sh
-RUN . "$HOME/.cargo/env" && ./build.sh ${buildoptions}
+RUN ./build.sh ${buildoptions}
 RUN touch /build/build.log
 
 FROM scratch

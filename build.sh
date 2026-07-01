@@ -415,6 +415,8 @@ function build_perlmod() {
 		exit 1
 	fi
 
+	PERLMOD_BIN_DEB="$(realpath "${PERLMOD_BIN_DEB}")"
+
 	${SUDO} apt-get install -y "${PERLMOD_BIN_DEB}"
 
 	# perlmod-bin is only needed as a build helper for libpmg-rs-perl.

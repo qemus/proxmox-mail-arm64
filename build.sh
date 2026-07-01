@@ -627,8 +627,15 @@ LIBPMG_RS_PERL_VERSION="$(dependency_package_version "${PMG_API_DEB}" libpmg-rs-
 LIBXDGMIME_PERL_VERSION="$(dependency_package_version "${PMG_API_DEB}" libxdgmime-perl amd64)"
 PMG_MOBILE_QUARANTINE_UI_VERSION="$(dependency_package_version "${PMG_API_DEB}" pmg-mobile-quarantine-ui amd64)"
 
-echo "Build perlmod 0.14.5"
-build_perlmod "0.14.5"
+PERLMOD_VERSION=$(package_version perlmod-bin amd64)
+
+if [ -z "${PERLMOD_VERSION}" ]; then
+    echo "Could not resolve perlmod-bin version" >&2
+    exit 1
+fi
+
+echo "Build perlmod ${PERLMOD_VERSION}"
+build_perlmod "${PERLMOD_VERSION}"
 
 echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
 build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"

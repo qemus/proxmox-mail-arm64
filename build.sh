@@ -500,7 +500,61 @@ path.write_text("\n".join(out) + "\n")
 EOF_PATCH_RULES
 	fi
 
-	PERLMOD_CRATE_PATH="$(find_cargo_package_path "${SOURCES}/perlmod" perl
+	PERLMOD_CRATE_PATH="$(find_cargo_package_path "${SOURCES}/perlmod" perlmod || true)"
+	PERLMOD_MACRO_CRATE_PATH="$(find_cargo_package_path "${SOURCES}/perlmod" perlmod-macro || true)"
+	PROXMOX_ACME_CRATE_PATH="$(find_cargo_package_path "${SOURCES}/proxmox" proxmox-acme || true)"
+
+	if [ -z "${PERLMOD_CRATE_PATH}" ]; then
+		echo "Could not find local perlmod Rust crate" >&2
+		exit 1
+	fi
+
+	if [ -z "${PROXMOX_ACME_CRATE_PATH}" ]; then
+		echo "Could not find local proxmox-acme Rust crate" >&2
+		exit 1
+	fi
+
+	if ! grep -q '^\[patch.crates-io\]' Cargo.toml; then
+		cat >> Cargo.toml <<EOF_PATCH
+
+[patch.crates-io]
+EOF_PATCH
+	fi
+
+	if ! grep -q '^perlmod[[:space:]]*=' Cargo.toml; then
+		cat >> Cargo.toml <<EOF_PATCH
+perlmod = { path = "${PERLMOD_CRATE_PATH}" }
+EOF_PATCH
+	fi
+
+	if [ -n "${PERLMOD_MACRO_CRATE_PATH}" ] && ! grep -q '^perlmod-macro[[:space:]]*=' Cargo.toml; then
+		cat >> Cargo.toml <<EOF_PATCH
+perlmod-macro = { path = "${PERLMOD_MACRO_CRATE_PATH}" }
+EOF_PATCH
+	fi
+
+	if ! grep -q '^proxmox-acme[[:space:]]*=' Cargo.toml; then
+		cat >> Cargo.toml <<EOF_PATCH
+proxmox-acme = { path = "${PROXMOX_ACME_CRATE_PATH}" }
+EOF_PATCH
+	fi
+
+	if [ -f debian/control ]; then
+		set_package_info
+	fi
+
+	dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
+
+	cd ../..
+
+	find proxmox-perl-rs -maxdepth 2 -name "libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \;
+	find proxmox-perl-rs -maxdepth 2 -name "libpmg-rs-perl-dbgsym_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \; 2>/dev/null || true
+
+	if ! compgen -G "${PACKAGES}/libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
+		echo "Could not find built libpmg-rs-perl package for version ${version}" >&2
+		exit 1
+	fi
+}
 
 function prepare_pmg_log_tracker() {
 	git_clone_or_fetch https://git.proxmox.com/git/proxmox.git

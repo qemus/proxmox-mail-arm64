@@ -461,8 +461,6 @@ function build_libpmg_rs_perl() {
 	sed -i '/librust-/d; /perlmod-bin/d' debian/control
 
 	# Do not use Debian's offline cargo registry.
-	# We removed the librust-* build dependencies, so /usr/share/cargo/registry
-	# may not exist. Use crates.io through rustup cargo instead.
 	rm -rf debian/cargo_registry
 	rm -f .cargo/config .cargo/config.toml
 
@@ -472,10 +470,7 @@ function build_libpmg_rs_perl() {
 registry = "https://github.com/rust-lang/crates.io-index"
 EOF_CARGO_CONFIG
 
-	# The original debian/rules runs:
-	# /usr/share/cargo/bin/cargo prepare-debian ... --link-from-system
-	# That forces the missing /usr/share/cargo/registry path.
-	# Disable that configure override and let the package build with normal cargo.
+	# Disable the Debian cargo registry preparation step.
 	if grep -q 'prepare-debian' debian/rules; then
 		python3 - <<'EOF_PATCH_RULES'
 from pathlib import Path
@@ -505,50 +500,7 @@ path.write_text("\n".join(out) + "\n")
 EOF_PATCH_RULES
 	fi
 
-	PERLMOD_CRATE_PATH="$(find_cargo_package_path "${SOURCES}/perlmod" perlmod || true)"
-	PERLMOD_MACRO_CRATE_PATH="$(find_cargo_package_path "${SOURCES}/perlmod" perlmod-macro || true)"
-
-	if [ -z "${PERLMOD_CRATE_PATH}" ]; then
-		echo "Could not find local perlmod Rust crate" >&2
-		exit 1
-	fi
-
-	if ! grep -q '^\[patch.crates-io\]' Cargo.toml; then
-		cat >> Cargo.toml <<EOF_PATCH
-
-[patch.crates-io]
-perlmod = { path = "${PERLMOD_CRATE_PATH}" }
-EOF_PATCH
-	else
-		if ! grep -q '^perlmod[[:space:]]*=' Cargo.toml; then
-			cat >> Cargo.toml <<EOF_PATCH
-perlmod = { path = "${PERLMOD_CRATE_PATH}" }
-EOF_PATCH
-		fi
-	fi
-
-	if [ -n "${PERLMOD_MACRO_CRATE_PATH}" ] && ! grep -q '^perlmod-macro[[:space:]]*=' Cargo.toml; then
-		cat >> Cargo.toml <<EOF_PATCH
-perlmod-macro = { path = "${PERLMOD_MACRO_CRATE_PATH}" }
-EOF_PATCH
-	fi
-
-	if [ -f debian/control ]; then
-		set_package_info
-	fi
-
-	dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
-
-	cd ../..
-
-	find proxmox-perl-rs -maxdepth 2 -name "libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \;
-	find proxmox-perl-rs -maxdepth 2 -name "libpmg-rs-perl-dbgsym_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \; 2>/dev/null || true
-
-	if ! compgen -G "${PACKAGES}/libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
-		echo "Could not find built libpmg-rs-perl package for version ${version}" >&2
-		exit 1
-	fi
-}
+	PERLMOD_CRATE_PATH="$(find_cargo_package_path "${SOURCES}/perlmod" perl
 
 function prepare_pmg_log_tracker() {
 	git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
@@ -900,6 +852,8 @@ fi
 
 echo "Build perlmod ${PERLMOD_VERSION}"
 build_perlmod "${PERLMOD_VERSION}"
+
+git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
 
 echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
 build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"

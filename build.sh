@@ -239,7 +239,12 @@ EOF
 }
 
 function prepare_proxmox_spamassassin() {
-    sed -i "s/proxmox-spamassassin_\$(DEB_VERSION)_amd64\.deb/proxmox-spamassassin_\$(DEB_VERSION)_${PACKAGE_ARCH}.deb/g" Makefile
+	sed -i "s/_amd64\.deb/_${PACKAGE_ARCH}.deb/g" Makefile
+	sed -i "s/_amd64\.changes/_${PACKAGE_ARCH}.changes/g" Makefile
+	sed -i "s/_amd64\.buildinfo/_${PACKAGE_ARCH}.buildinfo/g" Makefile
+
+	echo "Patched proxmox-spamassassin Makefile:"
+	grep -n "amd64\|${PACKAGE_ARCH}" Makefile || true
 }
 
 function prepare_package() {

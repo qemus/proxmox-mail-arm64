@@ -1078,6 +1078,11 @@ repackage_static_package_as_arch \
 	pmg-mobile-quarantine-ui \
 	"${PMG_MOBILE_QUARANTINE_UI_VERSION}"
 
+PMG_MOBILE_QUARANTINE_UI_DEB="${PACKAGES}/pmg-mobile-quarantine-ui_${PMG_MOBILE_QUARANTINE_UI_VERSION}_${PACKAGE_ARCH}.deb"
+
+echo "Download pmg-yew-quarantine-i18n dependency"
+download_dependency_package "${PMG_MOBILE_QUARANTINE_UI_DEB}" pmg-yew-quarantine-i18n all
+
 echo "Download architecture-independent Proxmox dependencies"
 
 download_dependency_package "${PMG_API_DEB}" libjs-qrcodejs all

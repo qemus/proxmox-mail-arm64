@@ -77,6 +77,55 @@ function git_checkout_version() {
 	git_clean_and_checkout "${ref}" "${path}"
 }
 
+function git_checkout_subdir_version() {
+	path=${1}
+	subdir=${2}
+	version=${3}
+
+	changelog="${subdir}/debian/changelog"
+
+	ref="$(
+		git -C "${path}" for-each-ref --format='%(refname:short)' refs/tags |
+			while read -r tag; do
+				if git -C "${path}" show "${tag}:${changelog}" >/dev/null 2>&1; then
+					tag_version="$(
+						git -C "${path}" show "${tag}:${changelog}" |
+							dpkg-parsechangelog -l- -SVersion 2>/dev/null || true
+					)"
+
+					if [ "${tag_version}" = "${version}" ]; then
+						echo "${tag}"
+						break
+					fi
+				fi
+			done
+	)"
+
+	if [ -z "${ref}" ]; then
+		ref="$(
+			git -C "${path}" log --format='%H' -- "${changelog}" |
+				while read -r commit; do
+					commit_version="$(
+						git -C "${path}" show "${commit}:${changelog}" |
+							dpkg-parsechangelog -l- -SVersion 2>/dev/null || true
+					)"
+
+					if [ "${commit_version}" = "${version}" ]; then
+						echo "${commit}"
+						break
+					fi
+				done
+		)"
+	fi
+
+	if [ -z "${ref}" ]; then
+		echo "Could not find Git ref for ${path}/${subdir} version ${version}" >&2
+		return 1
+	fi
+
+	git_clean_and_checkout "${ref}" "${path}"
+}
+
 function set_package_info() {
 	if [ "${GITHUB_ACTION}" ]; then
 		sed -i "s#^Maintainer:.*#Maintainer: Github Action <no-reply@github.com>#" debian/control
@@ -99,7 +148,8 @@ function load_packages() {
 					version=""
 					arch=""
 					filename=""
-				} else if ($1 == "Version") {
+				} else if ($1 == "Version"
+				) {
 					version=$2
 				} else if ($1 == "Architecture") {
 					arch=$2
@@ -256,13 +306,34 @@ function get_build_dependency_min_version() {
 	dependency=${2}
 
 	awk -v dep="${dependency}" '
-		/^Build-Depends:/,/^[^[:space:]]/ {
-			if (match($0, dep "[[:space:]]*\\(>=[[:space:]]*[^)]*\\)")) {
-				value=substr($0, RSTART, RLENGTH)
+		/^Build-Depends:/ {
+			in_build_depends=1
+			line=$0
+			sub(/^Build-Depends:[[:space:]]*/, "", line)
+			build_depends=line
+			next
+		}
+
+		in_build_depends && /^[[:space:]]/ {
+			build_depends=build_depends " " $0
+			next
+		}
+
+		in_build_depends {
+			in_build_depends=0
+		}
+
+		END {
+			gsub(/\n/, " ", build_depends)
+			gsub(/,/, " , ", build_depends)
+
+			pattern=dep "[[:space:]]*\\(>=[[:space:]]*[^)]*\\)"
+
+			if (match(build_depends, pattern)) {
+				value=substr(build_depends, RSTART, RLENGTH)
 				sub(".*\\(>=[[:space:]]*", "", value)
 				sub("\\).*", "", value)
 				print value
-				exit
 			}
 		}
 	' "${control_file}"
@@ -317,14 +388,8 @@ function build_libpmg_rs_perl() {
 		return 0
 	fi
 
-	git_clone_or_fetch https://git.proxmox.com/git/proxmox-perl-rs.git
-
-	cd proxmox-perl-rs
-
-	git clean -ffdx
-	git reset --hard
-
-	cd pmg-rs
+    git_clone_or_fetch https://git.proxmox.com/git/proxmox-perl-rs.git
+    cd proxmox-perl-rs/pmg-rs
 
 	sed -i '/librust-/d; /perlmod-bin/d' debian/control
 
@@ -676,14 +741,11 @@ if [ -z "${PMG_MOBILE_QUARANTINE_UI_VERSION}" ]; then
 fi
 
 git_clone_or_fetch https://git.proxmox.com/git/proxmox-perl-rs.git
-
-cd proxmox-perl-rs
-git clean -ffdx
-git reset --hard
+git_checkout_subdir_version proxmox-perl-rs pmg-rs "${LIBPMG_RS_PERL_VERSION}"
 
 PERLMOD_VERSION="$(
 	get_build_dependency_min_version \
-		"pmg-rs/debian/control" \
+		"proxmox-perl-rs/pmg-rs/debian/control" \
 		"perlmod-bin"
 )"
 

@@ -41,7 +41,7 @@ WORKDIR /build
 SHELL ["/bin/bash", "-c"]
 
 RUN chmod +x ./build.sh
-RUN ./build.sh ${buildoptions}
+RUN . "$HOME/.cargo/env" && ./build.sh ${buildoptions}
 RUN touch /build/build.log
 
 FROM scratch

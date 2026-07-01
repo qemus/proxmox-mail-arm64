@@ -563,6 +563,28 @@ PMG_API_DEB="$(find_package_file pmg-api)"
 PMG_GUI_DEB="$(find_package_file pmg-gui)"
 PMG_DOCS_DEB="$(find_package_file pmg-docs)"
 
+LIBPMG_RS_PERL_VERSION="$(dependency_package_version "${PMG_API_DEB}" libpmg-rs-perl amd64)"
+LIBXDGMIME_PERL_VERSION="$(dependency_package_version "${PMG_API_DEB}" libxdgmime-perl amd64)"
+PMG_MOBILE_QUARANTINE_UI_VERSION="$(dependency_package_version "${PMG_API_DEB}" pmg-mobile-quarantine-ui amd64)"
+
+echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
+build_make_deb_package \
+	https://git.proxmox.com/git/proxmox-perl-rs.git \
+	proxmox-perl-rs \
+	"${LIBPMG_RS_PERL_VERSION}"
+
+echo "Build libxdgmime-perl ${LIBXDGMIME_PERL_VERSION}"
+build_make_deb_package \
+	https://git.proxmox.com/git/libxdgmime-perl.git \
+	libxdgmime-perl \
+	"${LIBXDGMIME_PERL_VERSION}"
+
+echo "Build pmg-mobile-quarantine-ui ${PMG_MOBILE_QUARANTINE_UI_VERSION}"
+build_make_deb_package \
+	https://git.proxmox.com/git/pmg-yew-quarantine-gui.git \
+	pmg-yew-quarantine-gui \
+	"${PMG_MOBILE_QUARANTINE_UI_VERSION}"
+
 echo "Download architecture-independent Proxmox dependencies"
 
 download_dependency_package "${PMG_API_DEB}" libarchive-perl all

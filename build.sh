@@ -1066,12 +1066,12 @@ if [ -z "${PERLMOD_VERSION}" ]; then
 fi
 
 echo "Build perlmod ${PERLMOD_VERSION}"
-#build_perlmod "${PERLMOD_VERSION}"
+build_perlmod "${PERLMOD_VERSION}"
 
 git_clone_or_fetch https://git.proxmox.com/git/proxmox.git
 
 echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
-#build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"
+build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"
 
 echo "Build libxdgmime-perl ${LIBXDGMIME_PERL_VERSION}"
 build_make_deb_package \

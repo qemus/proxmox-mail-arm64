@@ -433,10 +433,55 @@ function build_libpmg_rs_perl() {
 		return 0
 	fi
 
-    git_clone_or_fetch https://git.proxmox.com/git/proxmox-perl-rs.git
-    cd proxmox-perl-rs/pmg-rs
+	git_clone_or_fetch https://git.proxmox.com/git/proxmox-perl-rs.git
+	cd proxmox-perl-rs/pmg-rs
 
 	sed -i '/librust-/d; /perlmod-bin/d' debian/control
+
+	# Do not use Debian's offline cargo registry.
+	# We removed the librust-* build dependencies, so /usr/share/cargo/registry
+	# may not exist. Use crates.io through rustup cargo instead.
+	rm -rf debian/cargo_registry
+	rm -f .cargo/config .cargo/config.toml
+
+	mkdir -p .cargo
+	cat > .cargo/config.toml <<'EOF_CARGO_CONFIG'
+[source.crates-io]
+registry = "https://github.com/rust-lang/crates.io-index"
+EOF_CARGO_CONFIG
+
+	# The original debian/rules runs:
+	# /usr/share/cargo/bin/cargo prepare-debian ... --link-from-system
+	# That forces the missing /usr/share/cargo/registry path.
+	# Disable that configure override and let the package build with normal cargo.
+	if grep -q 'prepare-debian' debian/rules; then
+		python3 - <<'EOF_PATCH_RULES'
+from pathlib import Path
+
+path = Path("debian/rules")
+lines = path.read_text().splitlines()
+out = []
+skip = False
+
+for line in lines:
+    if line.startswith("override_dh_auto_configure:"):
+        out.append("override_dh_auto_configure:")
+        out.append("\tdh_auto_configure")
+        skip = True
+        continue
+
+    if skip:
+        if line and not line.startswith("\t"):
+            skip = False
+        else:
+            continue
+
+    if not skip:
+        out.append(line)
+
+path.write_text("\n".join(out) + "\n")
+EOF_PATCH_RULES
+	fi
 
 	if [ -f debian/control ]; then
 		set_package_info
@@ -446,7 +491,7 @@ function build_libpmg_rs_perl() {
 
 	cd ../..
 
-    find proxmox-perl-rs -maxdepth 2 -name "libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \;
+	find proxmox-perl-rs -maxdepth 2 -name "libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \;
 	find proxmox-perl-rs -maxdepth 2 -name "libpmg-rs-perl-dbgsym_${version}_${PACKAGE_ARCH}.deb" -exec mv -f {} "${PACKAGES}/" \; 2>/dev/null || true
 
 	if ! compgen -G "${PACKAGES}/libpmg-rs-perl_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then

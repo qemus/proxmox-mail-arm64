@@ -249,27 +249,36 @@ function download_package() {
 	curl -sSfL "${url}" -o "${file}"
 }
 
-function latest_github_release_asset_version() {
+function latest_github_release_asset() {
 	repo=${1}
-	asset_prefix=${2}
+	package=${2}
 	min_version=${3}
 
 	api_url="https://api.github.com/repos/${repo}/releases"
 
 	curl -sSfL "${api_url}" |
-		jq -r --arg prefix "${asset_prefix}" '
+		jq -r --arg package "${package}" '
 			.[] as $release |
 			$release.assets[] |
-			select(.name | startswith($prefix)) |
-			.name
+			select(.name | test("^" + $package + "_[0-9][^_]*_arm64\\.deb$")) |
+			[
+				.name,
+				($release.tag_name // ""),
+				.browser_download_url
+			] |
+			@tsv
 		' |
-		sed -E "s/^${asset_prefix//\//\\/}_([^_]+)_arm64\.deb$/\1/" |
-		while read -r version; do
+		while IFS=$'\t' read -r asset tag url; do
+			version="$(
+				echo "${asset}" |
+					sed -E "s/^${package}_([^_]+)_arm64\.deb$/\1/"
+			)"
+
 			if dpkg --compare-versions "${version}" ge "${min_version}"; then
-				echo "${version}"
+				echo "${version};${tag};${url};${asset}"
 			fi
 		done |
-		sort -V |
+		sort -t ';' -k1,1V |
 		tail -n1
 }
 
@@ -1085,36 +1094,41 @@ if [ -z "${PBS_MIN_VERSION}" ]; then
 	exit 1
 fi
 
-PBS_CLIENT_VERSION="$(
-	latest_github_release_asset_version \
+PBS_ASSET="$(
+	latest_github_release_asset \
 		qemus/proxmox-backup-arm64 \
 		proxmox-backup-client \
 		"${PBS_MIN_VERSION}"
 )"
 
-if [ -z "${PBS_CLIENT_VERSION}" ]; then
+if [ -z "${PBS_ASSET}" ]; then
 	echo "Could not find proxmox-backup-client arm64 release >= ${PBS_MIN_VERSION}" >&2
 	exit 1
 fi
 
-PBS_VERSION="${PBS_CLIENT_VERSION%-*}"
+PBS_CLIENT_VERSION="${PBS_ASSET%%;*}"
+PBS_ASSET_REST="${PBS_ASSET#*;}"
+PBS_RELEASE_TAG="${PBS_ASSET_REST%%;*}"
+PBS_ASSET_REST="${PBS_ASSET_REST#*;}"
+PBS_CLIENT_URL="${PBS_ASSET_REST%%;*}"
+PBS_CLIENT_FILE="${PBS_ASSET_REST#*;}"
 
 echo "Resolved proxmox-backup-client:"
 echo "  minimum required: ${PBS_MIN_VERSION}"
 echo "  selected package: ${PBS_CLIENT_VERSION}"
-echo "  release tag:      ${PBS_VERSION}"
+echo "  release tag:      ${PBS_RELEASE_TAG}"
+echo "  asset file:       ${PBS_CLIENT_FILE}"
+
+download_external_package "${PBS_CLIENT_URL}"
 
 JOURNALREADER_VERSION="1.6-1"
 TERMPROXY_VERSION="2.1.0"
 
 download_external_package \
-    "https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_VERSION}/proxmox-backup-client_${PBS_CLIENT_VERSION}_arm64.deb"
+	"https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_RELEASE_TAG}/proxmox-mini-journalreader_${JOURNALREADER_VERSION}_arm64.deb"
 
 download_external_package \
-    "https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_VERSION}/proxmox-mini-journalreader_${JOURNALREADER_VERSION}_arm64.deb"
-
-download_external_package \
-    "https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_VERSION}/proxmox-termproxy_${TERMPROXY_VERSION}_arm64.deb"
+	"https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_RELEASE_TAG}/proxmox-termproxy_${TERMPROXY_VERSION}_arm64.deb"
 
 PMG_LOG_TRACKER_CONSTRAINT=$(get_dependency_constraint "${PMG_META_DEB}" pmg-log-tracker || true)
 PMG_LOG_TRACKER_VERSION=$(package_version pmg-log-tracker amd64 "$(dependency_operator "${PMG_LOG_TRACKER_CONSTRAINT}")" "$(dependency_version "${PMG_LOG_TRACKER_CONSTRAINT}")")

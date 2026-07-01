@@ -263,6 +263,35 @@ function dependency_package_version() {
 	package_version "${package}" "${arch}" "${operator}" "${version}"
 }
 
+function build_perlmod() {
+	version=${1:-0.14.5}
+
+	if compgen -G "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb" >/dev/null; then
+		echo "perlmod-bin up-to-date"
+		return 0
+	fi
+
+	git_clone_or_fetch https://git.proxmox.com/git/perlmod.git
+	git_checkout_version perlmod "${version}"
+
+	cd perlmod
+
+	sed -i '/librust-/d' debian/control
+
+	if [ -f debian/control ]; then
+		set_package_info
+	fi
+
+	dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
+
+	cd ..
+
+	mv -f perlmod-bin_${version}_${PACKAGE_ARCH}.deb "${PACKAGES}/"
+	mv -f perlmod-bin-dbgsym_${version}_${PACKAGE_ARCH}.deb "${PACKAGES}/" 2>/dev/null || true
+
+	${SUDO} apt-get install -y "${PACKAGES}/perlmod-bin_${version}_${PACKAGE_ARCH}.deb"
+}
+
 function build_libpmg_rs_perl() {
 	version=${1}
 
@@ -598,6 +627,11 @@ LIBPMG_RS_PERL_VERSION="$(dependency_package_version "${PMG_API_DEB}" libpmg-rs-
 LIBXDGMIME_PERL_VERSION="$(dependency_package_version "${PMG_API_DEB}" libxdgmime-perl amd64)"
 PMG_MOBILE_QUARANTINE_UI_VERSION="$(dependency_package_version "${PMG_API_DEB}" pmg-mobile-quarantine-ui amd64)"
 
+echo "Build perlmod 0.14.5"
+build_perlmod "0.14.5"
+
+echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
+build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"
 echo "Build libpmg-rs-perl ${LIBPMG_RS_PERL_VERSION}"
 build_libpmg_rs_perl "${LIBPMG_RS_PERL_VERSION}"
 

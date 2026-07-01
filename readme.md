@@ -29,7 +29,7 @@ apt-get update && apt-get install -y --no-install-recommends \
     build-essential ca-certificates curl devscripts dpkg-dev \
     equivs faketime git lintian pkg-config rsync sudo jq \
     dh-cargo libssl-dev libapt-pkg-dev nettle-dev clang libclang-dev \
-    libsystemd-dev uuid-dev
+    libsystemd-dev uuid-dev binutils
 ```
 
 ### Install `rustup`

@@ -28,7 +28,8 @@ With the script you can also download or install all packages of the latest rele
 apt-get update && apt-get install -y --no-install-recommends \
     build-essential ca-certificates curl devscripts dpkg-dev \
     equivs faketime git lintian pkg-config rsync sudo jq \
-    dh-cargo libssl-dev libapt-pkg-dev nettle-dev clang libclang-dev
+    dh-cargo libssl-dev libapt-pkg-dev nettle-dev clang libclang-dev \
+    libsystemd-dev uuid-dev
 ```
 
 ### Install `rustup`

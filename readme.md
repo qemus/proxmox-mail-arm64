@@ -85,6 +85,10 @@ You can add the debug option to redirect the complete build process output also 
 ## Stars 🌟
 [![Stargazers](https://raw.githubusercontent.com/star-stats/stars/refs/heads/data/charts/qemus-proxmox-mail-arm64.svg)](https://github.com/qemus/proxmox-mail-arm64/stargazers)
 
+## Disclaimer ⚖️
+
+*The product names, logos, brands, and other trademarks referred to within this project are the property of their respective trademark holders. This project is not affiliated, sponsored, or endorsed by Proxmox Server Solutions GmbH.*
+
 [build_url]: https://github.com/qemus/proxmox-mail-arm64/
 [release_url]: https://github.com/qemus/proxmox-mail-arm64/releases/
 

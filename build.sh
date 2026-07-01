@@ -673,22 +673,21 @@ function download_release() {
 }
 
 function install_server() {
-    if [ "${#file_list[@]}" -eq 0 ]; then
-        echo "Error: no files found to install" >&2
-        return 1
-    fi
+	if [ "${#file_list[@]}" -eq 0 ]; then
+		echo "Error: no files found to install" >&2
+		return 1
+	fi
 
-    if is_container; then
-        rm -f "${PACKAGES}"/proxmox-mailgateway_*.deb
-    else
-        rm -f "${PACKAGES}"/proxmox-mailgateway-container_*.deb
-    fi
+	# The meta packages are useful while building to resolve dependency versions,
+	# but they are not needed during install if all real subpackages are installed.
+	rm -f "${PACKAGES}"/proxmox-mailgateway_*.deb
+	rm -f "${PACKAGES}"/proxmox-mailgateway-container_*.deb
 
-    mapfile -t file_list < <(find "${PACKAGES}" -maxdepth 1 -name '*.deb' -print | sort)
+	mapfile -t file_list < <(find "${PACKAGES}" -maxdepth 1 -name '*.deb' -print | sort)
 
-    if ${SUDO} apt-get install -y "${file_list[@]}"; then
-        rm -f -- "${file_list[@]}"
-    fi
+	if ${SUDO} apt-get install -y "${file_list[@]}"; then
+		rm -f -- "${file_list[@]}"
+	fi
 }
 
 SUDO="${SUDO:-sudo -E}"

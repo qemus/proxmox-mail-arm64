@@ -189,8 +189,11 @@ function get_dependency_constraint() {
 		sed 's/^ *//' |
 		awk -v dep="${dependency}" '
 			$1 == dep {
-				gsub(/[()]/, "", $2)
-				print $2 ";" $3
+				operator=$2
+				version=$3
+				gsub(/[()]/, "", operator)
+				gsub(/[()]/, "", version)
+				print operator ";" version
 				exit
 			}
 		'

@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libclang-dev \
     libsystemd-dev \
     uuid-dev \
+	binutils \
 	&& rm -rf /var/lib/apt/lists/*
 
 ENV RUSTUP_TOOLCHAIN=stable

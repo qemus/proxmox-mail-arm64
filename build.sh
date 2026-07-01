@@ -142,6 +142,12 @@ function select_package() {
 	fi
 }
 
+function find_package_file() {
+	package=${1}
+
+	find "${PACKAGES}" -maxdepth 1 -name "${package}_*.deb" -print -quit
+}
+
 function package_version() {
 	package_name=${1}
 	arch_filter=${2:-}
@@ -538,6 +544,29 @@ download_dependency_package "${PMG_META_DEB}" pmg-api all
 download_dependency_package "${PMG_META_DEB}" pmg-gui all
 download_dependency_package "${PMG_META_DEB}" pmg-docs all
 download_dependency_package "${PMG_META_DEB}" pmg-i18n all
+
+PMG_API_DEB="$(find_package_file pmg-api)"
+PMG_GUI_DEB="$(find_package_file pmg-gui)"
+PMG_DOCS_DEB="$(find_package_file pmg-docs)"
+
+echo "Download architecture-independent Proxmox dependencies"
+
+download_dependency_package "${PMG_API_DEB}" libarchive-perl all
+download_dependency_package "${PMG_API_DEB}" libjs-qrcodejs all
+download_dependency_package "${PMG_API_DEB}" libproxmox-acme-perl all
+download_dependency_package "${PMG_API_DEB}" libproxmox-acme-plugins all
+download_dependency_package "${PMG_API_DEB}" libproxmox-rs-perl all
+download_dependency_package "${PMG_API_DEB}" libpve-apiclient-perl all
+download_dependency_package "${PMG_API_DEB}" libpve-common-perl all
+download_dependency_package "${PMG_API_DEB}" libpve-http-server-perl all
+download_dependency_package "${PMG_API_DEB}" proxmox-enterprise-support-keyring all
+
+download_dependency_package "${PMG_GUI_DEB}" libjs-extjs all
+download_dependency_package "${PMG_GUI_DEB}" libjs-qrcodejs all
+download_dependency_package "${PMG_GUI_DEB}" proxmox-widget-toolkit all
+
+download_dependency_package "${PMG_DOCS_DEB}" libjs-extjs all
+download_dependency_package "${PMG_API_DEB}" pve-xtermjs all
 
 PMG_LOG_TRACKER_CONSTRAINT=$(get_dependency_constraint "${PMG_META_DEB}" pmg-log-tracker || true)
 PMG_LOG_TRACKER_VERSION=$(package_version pmg-log-tracker amd64 "$(dependency_operator "${PMG_LOG_TRACKER_CONSTRAINT}")" "$(dependency_version "${PMG_LOG_TRACKER_CONSTRAINT}")")

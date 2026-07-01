@@ -1047,21 +1047,9 @@ download_dependency_package "${PMG_GUI_DEB}" proxmox-widget-toolkit all
 download_dependency_package "${PMG_DOCS_DEB}" libjs-extjs all
 download_dependency_package "${PMG_API_DEB}" pve-xtermjs all
 
-PBS_CONSTRAINT=$(get_dependency_constraint "${PMG_API_DEB}" proxmox-backup-client || true)
+PBS_VERSION="${PBS_VERSION:-4.2.1-1}"
+PBS_CLIENT_VERSION="${PBS_CLIENT_VERSION:-${PBS_VERSION}}"
 
-if [ -z "${PBS_CONSTRAINT}" ]; then
-	PBS_CONSTRAINT=$(get_dependency_constraint "${PMG_META_DEB}" proxmox-backup-client || true)
-fi
-
-PBS_VERSION=$(dependency_version "${PBS_CONSTRAINT}")
-PBS_VERSION=${PBS_VERSION%-*}    # strip Debian revision if present
-
-if [ -z "${PBS_VERSION}" ]; then
-	echo "Could not resolve proxmox-backup-client version" >&2
-	exit 1
-fi
-
-PBS_CLIENT_VERSION="${PBS_VERSION}-1"
 JOURNALREADER_VERSION="1.6-1"
 TERMPROXY_VERSION="2.1.0"
 

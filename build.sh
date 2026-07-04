@@ -96,6 +96,7 @@ function download_runtime_arch_all_dependency() {
 	required_version=${3:-}
 	dest=${4}
 
+	# Try PMG first, then shared PVE/devel repositories.
 	for repo in pmg pve devel; do
 		if file=$(download_arch_all_package_satisfying "${repo}" "${package_name}" "${relation}" "${required_version}" "${dest}" 2>/dev/null); then
 			echo "${file}"
@@ -116,8 +117,11 @@ function parse_deb_runtime_dependencies() {
 	local line dep package_name relation required_version version_re
 
 	while IFS= read -r line; do
+		# Use the first alternative. If that alternative is not in a Proxmox
+		# repo as Architecture:all, it is simply ignored.
 		dep="${line%%|*}"
 
+		# Trim whitespace.
 		dep="${dep#"${dep%%[![:space:]]*}"}"
 		dep="${dep%"${dep##*[![:space:]]}"}"
 		[ -n "${dep}" ] || continue
@@ -186,6 +190,8 @@ function dependency_constraint_from_deb() {
 	local line dep alt package_name relation required_version version_re
 
 	while IFS= read -r line; do
+		# Check every alternative, not only the first one, because packages may use
+		# alternatives for helper packages.
 		while IFS='|' read -r alt; do
 			dep="${alt}"
 			dep="${dep#"${dep%%[![:space:]]*}"}"
@@ -246,6 +252,7 @@ function resolve_commit_for_package_version() {
 	repo_path=${2}
 	package_name=${3}
 
+	# BinNMUs such as 1.2.3-1+b1 do not normally appear in source changelogs.
 	source_version=${version%%+*}
 	upstream=${source_version%%-*}
 
@@ -259,6 +266,8 @@ function resolve_commit_for_package_version() {
 		done
 	done
 
+	# Search all Debian changelogs in the repository. Some Proxmox repos contain
+	# multiple packages below subdirectories, for example proxmox-perl-rs/pmg-rs.
 	local changelog commit
 	while IFS= read -r changelog; do
 		commit=$(git -C "${repo_path}" log --all --format="%H" -1 -S "${package_name} (${source_version}" -- "${changelog}" 2>/dev/null || true)
@@ -282,6 +291,8 @@ function resolve_commit_for_debian_version() {
 	repo_path=${2}
 	package_name=${3:-}
 
+	# Compatibility wrapper. The generic package resolver handles tags,
+	# root changelogs, and nested */debian/changelog files.
 	if [ -n "${package_name}" ]; then
 		resolve_commit_for_package_version "${version}" "${repo_path}" "${package_name}"
 	else
@@ -706,6 +717,8 @@ function build_perlmod() {
 
 	${SUDO} apt-get install -y "${PERLMOD_BIN_DEB}"
 
+	# perlmod-bin is only needed as a build helper for libpmg-rs-perl.
+	# Do not keep it in the final release package directory.
 	rm -f "${PERLMOD_BIN_DEB}"
 	find perlmod -maxdepth 2 -name 'perlmod-bin-dbgsym_*_*.deb' -delete 2>/dev/null || true
 }
@@ -745,6 +758,7 @@ function build_libpmg_rs_perl() {
 
 	sed -i '/librust-/d; /perlmod-bin/d' debian/control
 
+	# Do not use Debian's offline cargo registry.
 	rm -rf debian/cargo_registry
 	rm -f .cargo/config .cargo/config.toml
 
@@ -754,6 +768,7 @@ function build_libpmg_rs_perl() {
 registry = "https://github.com/rust-lang/crates.io-index"
 EOF_CARGO_CONFIG
 
+	# Disable the Debian cargo registry preparation step.
 	if grep -q 'prepare-debian' debian/rules; then
 		python3 - <<'EOF_PATCH_RULES'
 from pathlib import Path
@@ -783,6 +798,8 @@ path.write_text("\n".join(out) + "\n")
 EOF_PATCH_RULES
 	fi
 
+	# Generate one complete [patch.crates-io] section from the local Proxmox
+	# Rust repos. This avoids discovering missing crates one build at a time.
 	python3 - "${SOURCES}/perlmod" "${SOURCES}/proxmox" <<'EOF_PATCH_CARGO'
 from pathlib import Path
 import re
@@ -822,6 +839,8 @@ for root in roots:
         if not name:
             continue
 
+        # Keep the first match. Duplicate names should not normally happen,
+        # but this avoids unstable output if we ever hit one.
         patches.setdefault(name, str(path.parent.resolve()))
 
 required = [
@@ -1072,9 +1091,13 @@ function download_release() {
 
 function remove_uninstallable_packages() {
 
+	# The meta packages are useful while building to resolve dependency versions,
+	# but they are not needed during install if all real subpackages are installed.
 	rm -f "${PACKAGES}"/proxmox-mailgateway_*.deb
 	rm -f "${PACKAGES}"/proxmox-mailgateway-container_*.deb
 
+	# Kernel/header packages are not needed for this install and may be
+	# uninstallable on ARM64 because their meta dependencies are unavailable.
 	rm -f "${PACKAGES}"/pve-headers_*.deb
 	rm -f "${PACKAGES}"/proxmox-headers-*.deb
 	rm -f "${PACKAGES}"/proxmox-default-headers_*.deb
@@ -1392,9 +1415,9 @@ build_make_deb_package \
 	proxmox-spamassassin \
 	"${PROXMOX_SPAMASSASSIN_VERSION}"
 
-shopt -s nullglob
-final_debs=("${PACKAGES}"/*.deb)
-shopt -u nullglob
+mapfile -t final_debs < <(
+	find "${PACKAGES}" -maxdepth 1 -type f -name '*.deb' -print | sort
+)
 
 download_runtime_arch_all_dependencies "${final_debs[@]}"
 

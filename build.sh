@@ -1463,6 +1463,16 @@ mapfile -t final_debs < <(
 
 download_runtime_arch_all_dependencies "${final_debs[@]}"
 
+# Rename platform independant packages to _all.deb
+for deb in "${PACKAGES}"/*_amd64.deb; do
+  [ -e "$deb" ] || continue
+  arch="$(dpkg-deb -f "$deb" Architecture 2>/dev/null || true)"
+  [ "$arch" = "all" ] || continue
+
+  fixed="${deb%_amd64.deb}_all.deb"
+  mv -f "$deb" "$fixed"
+done
+
 # Remove uninstallable packages from output
 remove_uninstallable_packages
 

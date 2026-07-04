@@ -5,21 +5,25 @@ FROM ${baseimage} AS builder-stage
 ARG buildoptions
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-	build-essential \
-	ca-certificates \
-	curl \
-	devscripts \
-	dpkg-dev \
-	equivs \
-	faketime \
-	git \
-	lintian \
-	pkg-config \
-	rsync \
-	sudo \
-	jq \
-	dh-cargo \
+RUN <<EOF
+  set -eu
+
+  apt-get update
+  apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    curl \
+    devscripts \
+    dpkg-dev \
+    equivs \
+    faketime \
+    git \
+    lintian \
+    pkg-config \
+    rsync \
+    sudo \
+    jq \
+    dh-cargo \
     libssl-dev \
     libapt-pkg-dev \
     nettle-dev \
@@ -27,9 +31,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libclang-dev \
     libsystemd-dev \
     uuid-dev \
-	binutils \
-	libarchive-dev \
-	&& rm -rf /var/lib/apt/lists/*
+    binutils \
+    libarchive-dev
+
+  rm -rf /var/lib/apt/lists/*
+EOF
 
 ENV RUSTUP_TOOLCHAIN=stable
 ENV RUSTUP_INIT_SKIP_PATH_CHECK=yes
@@ -38,12 +44,19 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 RUN rustup toolchain install stable && rustup default stable
 
-RUN curl -fsSL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
-	-o /usr/share/keyrings/proxmox-archive-keyring.gpg
+RUN <<EOF
+  set -eu
 
-RUN echo "deb [signed-by=/usr/share/keyrings/proxmox-archive-keyring.gpg] http://download.proxmox.com/debian/devel trixie main" \
-	> /etc/apt/sources.list.d/proxmox-devel.list && \
-	apt-get update
+  # Add Proxmox archive keyring
+  curl -fsSL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
+    -o /usr/share/keyrings/proxmox-archive-keyring.gpg
+
+  # Add Proxmox development repository
+  echo "deb [signed-by=/usr/share/keyrings/proxmox-archive-keyring.gpg] http://download.proxmox.com/debian/devel trixie main" \
+    > /etc/apt/sources.list.d/proxmox-devel.list
+
+  apt-get update
+EOF
 
 COPY . /build/
 WORKDIR /build

@@ -1197,6 +1197,9 @@ while [ "$#" -ge 1 ]; do
 	shift
 done
 
+# Docs are downloaded from the PMG repository below, so never build them locally.
+[[ ${BUILD_PROFILES} =~ nodoc ]] || BUILD_PROFILES=${BUILD_PROFILES}",nodoc"
+
 [ -n "${BUILD_PROFILES}" ] && BUILD_PROFILES="--build-profiles=${BUILD_PROFILES#,}"
 
 if [[ ! " ${DEB_BUILD_OPTIONS:-} " =~ " nocheck " ]]; then

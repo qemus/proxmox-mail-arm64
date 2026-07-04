@@ -218,35 +218,6 @@ function dependency_constraint_from_deb() {
 	return 1
 }
 
-function package_version_satisfying() {
-	package_name=${1}
-	arch_filter=${2:-}
-	relation=${3:-}
-	required_version=${4:-}
-
-	version_target=""
-
-	while IFS=';' read -r name version arch file depends; do
-		[ "${name}" = "${package_name}" ] || continue
-		[ -n "${version}" ] || continue
-
-		if [ -n "${arch_filter}" ] && [ "${arch}" != "${arch_filter}" ]; then
-			continue
-		fi
-
-		if [ -n "${relation}" ] && [ -n "${required_version}" ]; then
-			dpkg --compare-versions "${version}" "${relation}" "${required_version}" || continue
-		fi
-
-		if [ -z "${version_target}" ] || dpkg --compare-versions "${version}" '>>' "${version_target}"; then
-			version_target=${version}
-		fi
-	done <<<"${PACKAGES_PMG}"
-
-	[ -n "${version_target}" ] || return 1
-	echo "${version_target}"
-}
-
 function resolve_commit_for_package_version() {
 	version=${1}
 	repo_path=${2}
@@ -742,28 +713,6 @@ function build_perlmod() {
 	# Do not keep it in the final release package directory.
 	rm -f "${PERLMOD_BIN_DEB}"
 	find perlmod -maxdepth 2 -name 'perlmod-bin-dbgsym_*_*.deb' -delete 2>/dev/null || true
-}
-
-function find_cargo_package_path() {
-	path=${1}
-	package=${2}
-
-	cargo_file="$(
-		find "${path}" -name Cargo.toml -print |
-			while read -r file; do
-				if grep -q "^[[:space:]]*name[[:space:]]*=[[:space:]]*\"${package}\"" "${file}"; then
-					echo "${file}"
-					break
-				fi
-			done
-	)"
-
-	if [ -z "${cargo_file}" ]; then
-		return 1
-	fi
-
-	cargo_dir="${cargo_file%/Cargo.toml}"
-	realpath "${cargo_dir}"
 }
 
 function build_libpmg_rs_perl() {

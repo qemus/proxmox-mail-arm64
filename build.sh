@@ -5,6 +5,290 @@
 
 set -eu
 
+function download_package() {
+	package=${1}
+	arch_filter=${2:-all}
+	dest=${3:-${PACKAGES}}
+	version_operator=${4:-}
+	version_filter=${5:-}
+
+	url=$(select_package "${package}" "${arch_filter}" "${version_operator}" "${version_filter}")
+
+	if [ -z "${url}" ]; then
+		echo "Error: package ${package} with architecture ${arch_filter} not found" >&2
+		return 1
+	fi
+
+	file="${dest}/${url##*/}"
+
+	if [ -e "${file}" ]; then
+		echo "${package} up-to-date"
+		return 0
+	fi
+
+	echo "${package} downloading... ${url}"
+	curl -sSfL "${url}" -o "${file}"
+}
+
+function get_base() {
+	local repo="$1"
+
+	if [[ "${repo}" == "pmg" ]]; then
+		echo "${PACKAGES_PMG}"
+	elif [[ "${repo}" == "devel" ]]; then
+		echo "${PACKAGES_DEVEL}"
+	elif [[ "${repo}" == "pve" ]]; then
+		echo "${PACKAGES_PVE}"
+	else
+		echo "Unknown repo ${repo}" >&2
+		exit 1
+	fi
+
+	return 0
+}
+
+function download_arch_all_package_satisfying() {
+	repo=${1}
+	package_name=${2}
+	relation=${3}
+	required_version=${4}
+	dest=${5}
+
+	url_base=http://download.proxmox.com/debian/${repo}
+	packages_target=$(get_base "${repo}")
+	version_target=""
+	file_target=""
+
+	while IFS=';' read -r name version arch file depends; do
+		[[ "${name}" == "${package_name}" ]] || continue
+		[ -n "${version}" ] || continue
+		[ "${arch}" = "all" ] || continue
+
+		if [ -n "${relation}" ] && [ -n "${required_version}" ]; then
+			dpkg --compare-versions "${version}" "${relation}" "${required_version}" || continue
+		fi
+
+		if [ -z "${version_target}" ] || dpkg --compare-versions "${version}" '>>' "${version_target}"; then
+			version_target=${version}
+			file_target=${file}
+		fi
+	done <<<"${packages_target}"
+
+	[ -n "${file_target}" ] || return 1
+
+	url=${url_base}/${file_target}
+	file="${dest}/${url##*/}"
+
+	if [ -e "${file}" ]; then
+		echo "${package_name} ${version_target} up-to-date" >&2
+		echo "${file}"
+		return 0
+	fi
+
+	echo "${package_name} ${version_target} downloading runtime dependency...${url}" >&2
+	curl -sSfL "${url}" -o "${file}"
+	echo "${file}"
+}
+
+function download_runtime_arch_all_dependency() {
+	package_name=${1}
+	relation=${2:-}
+	required_version=${3:-}
+	dest=${4}
+
+	for repo in pmg pve devel; do
+		if file=$(download_arch_all_package_satisfying "${repo}" "${package_name}" "${relation}" "${required_version}" "${dest}" 2>/dev/null); then
+			echo "${file}"
+			return 0
+		fi
+	done
+
+	return 1
+}
+
+function parse_deb_runtime_dependencies() {
+	deb=${1}
+	[ -e "${deb}" ] || return 0
+
+	fields="$(dpkg-deb -f "${deb}" Pre-Depends Depends Recommends 2>/dev/null || true)"
+	[ -n "${fields}" ] || return 0
+
+	local line dep package_name relation required_version version_re
+
+	while IFS= read -r line; do
+		dep="${line%%|*}"
+
+		dep="${dep#"${dep%%[![:space:]]*}"}"
+		dep="${dep%"${dep##*[![:space:]]}"}"
+		[ -n "${dep}" ] || continue
+
+		package_name="${dep%% *}"
+		package_name="${package_name%%:*}"
+		[ -n "${package_name}" ] || continue
+
+		relation=""
+		required_version=""
+
+		version_re='\(([^[:space:]]+)[[:space:]]+([^)]*)\)'
+		if [[ "${dep}" =~ ${version_re} ]]; then
+			relation="${BASH_REMATCH[1]}"
+			required_version="${BASH_REMATCH[2]}"
+		fi
+
+		printf '%s;%s;%s\n' "${package_name}" "${relation}" "${required_version}"
+	done < <(printf '%s\n' "${fields}" | tr ',' '\n')
+}
+
+function download_runtime_arch_all_dependencies() {
+	if [ "$#" -eq 0 ]; then
+		return 0
+	fi
+
+	echo "Resolving Architecture:all runtime dependencies recursively from package metadata"
+
+	local queue=() seen=() deb dep package_name relation required_version downloaded_file key already_seen
+
+	queue=("$@")
+
+	while [ "${#queue[@]}" -gt 0 ]; do
+		deb="${queue[0]}"
+		queue=("${queue[@]:1}")
+		[ -e "${deb}" ] || continue
+
+		while IFS=';' read -r package_name relation required_version; do
+			[ -n "${package_name}" ] || continue
+			key="${package_name};${relation};${required_version}"
+
+			already_seen=false
+			for dep in "${seen[@]}"; do
+				if [ "${dep}" = "${key}" ]; then
+					already_seen=true
+					break
+				fi
+			done
+			${already_seen} && continue
+			seen+=("${key}")
+
+			if downloaded_file="$(download_runtime_arch_all_dependency "${package_name}" "${relation}" "${required_version}" "${PACKAGES}" 2>/dev/null)"; then
+				[ -e "${downloaded_file}" ] && queue+=("${downloaded_file}")
+			fi
+		done < <(parse_deb_runtime_dependencies "${deb}")
+	done
+}
+
+function dependency_constraint_from_deb() {
+	deb=${1}
+	wanted=${2}
+
+	fields="$(dpkg-deb -f "${deb}" Pre-Depends Depends Recommends 2>/dev/null || true)"
+	[ -n "${fields}" ] || return 1
+
+	local line dep alt package_name relation required_version version_re
+
+	while IFS= read -r line; do
+		while IFS='|' read -r alt; do
+			dep="${alt}"
+			dep="${dep#"${dep%%[![:space:]]*}"}"
+			dep="${dep%"${dep##*[![:space:]]}"}"
+			[ -n "${dep}" ] || continue
+
+			package_name="${dep%% *}"
+			package_name="${package_name%%:*}"
+			[ "${package_name}" = "${wanted}" ] || continue
+
+			relation=""
+			required_version=""
+			version_re='\(([^[:space:]]+)[[:space:]]+([^)]*)\)'
+			if [[ "${dep}" =~ ${version_re} ]]; then
+				relation="${BASH_REMATCH[1]}"
+				required_version="${BASH_REMATCH[2]}"
+			fi
+
+			printf '%s;%s\n' "${relation}" "${required_version}"
+			return 0
+		done <<<"${line}"
+	done < <(printf '%s\n' "${fields}" | tr ',' '\n')
+
+	return 1
+}
+
+function package_version_satisfying() {
+	package_name=${1}
+	arch_filter=${2:-}
+	relation=${3:-}
+	required_version=${4:-}
+
+	version_target=""
+
+	while IFS=';' read -r name version arch file depends; do
+		[ "${name}" = "${package_name}" ] || continue
+		[ -n "${version}" ] || continue
+
+		if [ -n "${arch_filter}" ] && [ "${arch}" != "${arch_filter}" ]; then
+			continue
+		fi
+
+		if [ -n "${relation}" ] && [ -n "${required_version}" ]; then
+			dpkg --compare-versions "${version}" "${relation}" "${required_version}" || continue
+		fi
+
+		if [ -z "${version_target}" ] || dpkg --compare-versions "${version}" '>>' "${version_target}"; then
+			version_target=${version}
+		fi
+	done <<<"${PACKAGES_PMG}"
+
+	[ -n "${version_target}" ] || return 1
+	echo "${version_target}"
+}
+
+function resolve_commit_for_package_version() {
+	version=${1}
+	repo_path=${2}
+	package_name=${3}
+
+	source_version=${version%%+*}
+	upstream=${source_version%%-*}
+
+	for pattern in "${source_version}" "${version}" "${upstream}"; do
+		for tag in $(git -C "${repo_path}" tag -l "*${pattern}*" 2>/dev/null); do
+			commit=$(git -C "${repo_path}" rev-list -n1 "${tag}" 2>/dev/null || true)
+			if [ -n "${commit}" ]; then
+				echo "${commit}"
+				return 0
+			fi
+		done
+	done
+
+	local changelog commit
+	while IFS= read -r changelog; do
+		commit=$(git -C "${repo_path}" log --all --format="%H" -1 -S "${package_name} (${source_version}" -- "${changelog}" 2>/dev/null || true)
+		[ -n "${commit}" ] && { echo "${commit}"; return 0; }
+
+		commit=$(git -C "${repo_path}" log --all --format="%H" -1 -S "${package_name} (${upstream}" -- "${changelog}" 2>/dev/null || true)
+		[ -n "${commit}" ] && { echo "${commit}"; return 0; }
+	done < <(git -C "${repo_path}" ls-files '*debian/changelog' 2>/dev/null)
+
+	commit=$(git -C "${repo_path}" log --all --format="%H" -1 --grep="bump version to ${source_version}" 2>/dev/null || true)
+	[ -n "${commit}" ] && { echo "${commit}"; return 0; }
+
+	commit=$(git -C "${repo_path}" log --all --format="%H" -1 --grep="bump version to ${upstream}" 2>/dev/null || true)
+	[ -n "${commit}" ] && { echo "${commit}"; return 0; }
+
+	return 1
+}
+
+function resolve_commit_for_debian_version() {
+	version=${1}
+	repo_path=${2}
+	package_name=${3:-}
+
+	if [ -n "${package_name}" ]; then
+		resolve_commit_for_package_version "${version}" "${repo_path}" "${package_name}"
+	else
+		resolve_commit_for_package_version "${version}" "${repo_path}" ""
+	fi
+}
+
 function git_clone_or_fetch() {
 	url=${1}              # url/name.git
 	name_git=${url##*/}   # name.git
@@ -61,99 +345,78 @@ function git_clean_and_checkout() {
 	git "${path_args[@]}" checkout "${commit_id}"
 }
 
-function git_checkout_version() {
-	path=${1}
+function checkout_package_version() {
+	repo_path=${1}
 	version=${2}
+	package_name=${3}
 
-	ref="$(
-		git -C "${path}" for-each-ref --format='%(refname:short)' refs/tags |
-			while read -r tag; do
-				if git -C "${path}" show "${tag}:debian/changelog" >/dev/null 2>&1; then
-					tag_version="$(
-						git -C "${path}" show "${tag}:debian/changelog" |
-							dpkg-parsechangelog -l- -SVersion 2>/dev/null || true
-					)"
+	commit="$(resolve_commit_for_package_version "${version}" "${repo_path}" "${package_name}" || true)"
 
-					if [ "${tag_version}" = "${version}" ]; then
-						echo "${tag}"
-						break
-					fi
-				fi
-			done
-	)"
-
-	if [ -z "${ref}" ]; then
-		ref="$(
-			git -C "${path}" log --format='%H' -- debian/changelog |
-				while read -r commit; do
-					commit_version="$(
-						git -C "${path}" show "${commit}:debian/changelog" |
-							dpkg-parsechangelog -l- -SVersion 2>/dev/null || true
-					)"
-
-					if [ "${commit_version}" = "${version}" ]; then
-						echo "${commit}"
-						break
-					fi
-				done
-		)"
-	fi
-
-	if [ -z "${ref}" ]; then
-		echo "Could not find Git ref for ${path} version ${version}" >&2
+	if [ -z "${commit}" ]; then
+		echo "Could not find Git ref for ${repo_path} package ${package_name} version ${version}" >&2
 		return 1
 	fi
 
-	git_clean_and_checkout "${ref}" "${path}"
+	git_clean_and_checkout "${commit}" "${repo_path}"
 }
 
-function git_checkout_subdir_version() {
-	path=${1}
-	subdir=${2}
-	version=${3}
+function load_packages() {
+	url=${1}
 
-	changelog="${subdir}/debian/changelog"
+	curl -sSf -H 'Cache-Control: no-cache' "${url}" |
+		gzip -dc |
+		awk -F": " '
+			/^(Package|Version|Architecture|Depends|Filename)/ {
+				if ($1 == "Package") {
+					package=$2
+					version=""
+					arch=""
+					depends=""
+					filename=""
+				} else if ($1 == "Version") {
+					version=$2
+				} else if ($1 == "Architecture") {
+					arch=$2
+				} else if ($1 == "Depends") {
+					depends=$2
+				} else if ($1 == "Filename") {
+					filename=$2
+					print package ";" version ";" arch ";" filename ";" depends
+				}
+			}
+		'
+}
 
-	ref="$(
-		git -C "${path}" for-each-ref --format='%(refname:short)' refs/tags |
-			while read -r tag; do
-				if git -C "${path}" show "${tag}:${changelog}" >/dev/null 2>&1; then
-					tag_version="$(
-						git -C "${path}" show "${tag}:${changelog}" |
-							dpkg-parsechangelog -l- -SVersion 2>/dev/null || true
-					)"
+function select_package() {
+	package_name=${1}
+	arch_filter=${2:-}
+	version_operator=${3:-}
+	version_filter=${4:-}
 
-					if [ "${tag_version}" = "${version}" ]; then
-						echo "${tag}"
-						break
-					fi
-				fi
-			done
-	)"
+	version_target=""
+	file_target=""
 
-	if [ -z "${ref}" ]; then
-		ref="$(
-			git -C "${path}" log --format='%H' -- "${changelog}" |
-				while read -r commit; do
-					commit_version="$(
-						git -C "${path}" show "${commit}:${changelog}" |
-							dpkg-parsechangelog -l- -SVersion 2>/dev/null || true
-					)"
+	while IFS=';' read -r name version arch file depends; do
+		[ "${name}" = "${package_name}" ] || continue
+		[ -n "${version}" ] || continue
 
-					if [ "${commit_version}" = "${version}" ]; then
-						echo "${commit}"
-						break
-					fi
-				done
-		)"
+		if [ -n "${arch_filter}" ] && [ "${arch}" != "${arch_filter}" ]; then
+			continue
+		fi
+
+		if [ -n "${version_operator}" ] && [ -n "${version_filter}" ]; then
+			dpkg --compare-versions "${version}" "${version_operator}" "${version_filter}" || continue
+		fi
+
+		if [ -z "${version_target}" ] || dpkg --compare-versions "${version}" ">>" "${version_target}"; then
+			version_target=${version}
+			file_target=${file}
+		fi
+	done <<<"${PACKAGES_PMG}"
+
+	if [ -n "${file_target}" ]; then
+		echo "http://download.proxmox.com/debian/pmg/${file_target}"
 	fi
-
-	if [ -z "${ref}" ]; then
-		echo "Could not find Git ref for ${path}/${subdir} version ${version}" >&2
-		return 1
-	fi
-
-	git_clean_and_checkout "${ref}" "${path}"
 }
 
 function set_package_info() {
@@ -164,30 +427,6 @@ function set_package_info() {
 		sed -i '\#^Origin: https://github.com/qemus/proxmox-mail-arm64$#d' debian/control
 		sed -i "s#^\(Maintainer.*\)\$#\1\nOrigin: https://github.com/qemus/proxmox-mail-arm64#" debian/control
 	fi
-}
-
-function load_packages() {
-	url=${1}
-
-	curl -sSf -H 'Cache-Control: no-cache' "${url}" |
-		gzip -dc |
-		awk -F": " '
-			/^(Package|Version|Architecture|Filename)/ {
-				if ($1 == "Package") {
-					package=$2
-					version=""
-					arch=""
-					filename=""
-				} else if ($1 == "Version") {
-					version=$2
-				} else if ($1 == "Architecture") {
-					arch=$2
-				} else if ($1 == "Filename") {
-					filename=$2
-					print package ";" version ";" arch ";" filename
-				}
-			}
-		'
 }
 
 function download_external_package() {
@@ -204,37 +443,6 @@ function download_external_package() {
 	curl -fsSL "${url}" -o "${file}"
 }
 
-function select_package() {
-	package_name=${1}
-	arch_filter=${2:-}
-	version_operator=${3:-}
-	version_filter=${4:-}
-
-	version_target="0"
-	file_target=""
-
-	while IFS=';' read -r name version arch file; do
-		[ "${name}" = "${package_name}" ] || continue
-
-		if [ -n "${arch_filter}" ] && [ "${arch}" != "${arch_filter}" ]; then
-			continue
-		fi
-
-		if [ -n "${version_operator}" ] && [ -n "${version_filter}" ]; then
-			dpkg --compare-versions "${version}" "${version_operator}" "${version_filter}" || continue
-		fi
-
-		if dpkg --compare-versions "${version}" ">>" "${version_target}"; then
-			version_target=${version}
-			file_target=${file}
-		fi
-	done <<<"${PACKAGES_PMG}"
-
-	if [ -n "${file_target}" ]; then
-		echo "http://download.proxmox.com/debian/pmg/${file_target}"
-	fi
-}
-
 function find_package_file() {
 	package=${1}
 
@@ -248,35 +456,12 @@ function package_version() {
 	version_filter=${4:-}
 
 	url=$(select_package "${package_name}" "${arch_filter}" "${version_operator}" "${version_filter}")
+	[ -n "${url}" ] || return 1
+
 	file=${url##*/}
 
 	echo "${file}" |
 		sed -E "s/^${package_name}_([^_]+)_.*/\1/"
-}
-
-function download_package() {
-	package=${1}
-	arch_filter=${2:-all}
-	dest=${3:-${PACKAGES}}
-	version_operator=${4:-}
-	version_filter=${5:-}
-
-	url=$(select_package "${package}" "${arch_filter}" "${version_operator}" "${version_filter}")
-
-	if [ -z "${url}" ]; then
-		echo "Error: package ${package} with architecture ${arch_filter} not found" >&2
-		return 1
-	fi
-
-	file="${dest}/${url##*/}"
-
-	if [ -e "${file}" ]; then
-		echo "${package} up-to-date"
-		return 0
-	fi
-
-	echo "${package} downloading... ${url}"
-	curl -sSfL "${url}" -o "${file}"
 }
 
 function latest_github_release_asset() {
@@ -367,22 +552,7 @@ function repackage_static_package_as_arch() {
 }
 
 function get_dependency_constraint() {
-	deb=${1}
-	dependency=${2}
-
-	dpkg-deb -f "${deb}" Depends |
-		tr ',' '\n' |
-		sed 's/^ *//' |
-		awk -v dep="${dependency}" '
-			$1 == dep {
-				operator=$2
-				version=$3
-				gsub(/[()]/, "", operator)
-				gsub(/[()]/, "", version)
-				print operator ";" version
-				exit
-			}
-		'
+	dependency_constraint_from_deb "$@"
 }
 
 function dependency_operator() {
@@ -536,8 +706,6 @@ function build_perlmod() {
 
 	${SUDO} apt-get install -y "${PERLMOD_BIN_DEB}"
 
-	# perlmod-bin is only needed as a build helper for libpmg-rs-perl.
-	# Do not keep it in the final release package directory.
 	rm -f "${PERLMOD_BIN_DEB}"
 	find perlmod -maxdepth 2 -name 'perlmod-bin-dbgsym_*_*.deb' -delete 2>/dev/null || true
 }
@@ -577,7 +745,6 @@ function build_libpmg_rs_perl() {
 
 	sed -i '/librust-/d; /perlmod-bin/d' debian/control
 
-	# Do not use Debian's offline cargo registry.
 	rm -rf debian/cargo_registry
 	rm -f .cargo/config .cargo/config.toml
 
@@ -587,7 +754,6 @@ function build_libpmg_rs_perl() {
 registry = "https://github.com/rust-lang/crates.io-index"
 EOF_CARGO_CONFIG
 
-	# Disable the Debian cargo registry preparation step.
 	if grep -q 'prepare-debian' debian/rules; then
 		python3 - <<'EOF_PATCH_RULES'
 from pathlib import Path
@@ -617,8 +783,6 @@ path.write_text("\n".join(out) + "\n")
 EOF_PATCH_RULES
 	fi
 
-	# Generate one complete [patch.crates-io] section from the local Proxmox
-	# Rust repos. This avoids discovering missing crates one build at a time.
 	python3 - "${SOURCES}/perlmod" "${SOURCES}/proxmox" <<'EOF_PATCH_CARGO'
 from pathlib import Path
 import re
@@ -658,8 +822,6 @@ for root in roots:
         if not name:
             continue
 
-        # Keep the first match. Duplicate names should not normally happen,
-        # but this avoids unstable output if they do.
         patches.setdefault(name, str(path.parent.resolve()))
 
 required = [
@@ -810,7 +972,7 @@ function build_make_deb_package() {
 	fi
 
 	git_clone_or_fetch "${repo_url}"
-	git_checkout_version "${repo_name}" "${version}"
+	checkout_package_version "${repo_name}" "${version}" "${output_package}"
 
 	cd "${repo_name}"
 
@@ -837,7 +999,7 @@ function build_dpkg_package() {
 	fi
 
 	git_clone_or_fetch "${repo_url}"
-	git_checkout_version "${repo_name}" "${version}"
+	checkout_package_version "${repo_name}" "${version}" "${repo_name}"
 
 	cd "${repo_name}"
 
@@ -910,20 +1072,15 @@ function download_release() {
 
 function remove_uninstallable_packages() {
 
-  # The meta packages are useful while building to resolve dependency versions,
-  # but they are not needed during install if all real subpackages are installed.
-  rm -f "${PACKAGES}"/proxmox-mailgateway_*.deb
-  rm -f "${PACKAGES}"/proxmox-mailgateway-container_*.deb
+	rm -f "${PACKAGES}"/proxmox-mailgateway_*.deb
+	rm -f "${PACKAGES}"/proxmox-mailgateway-container_*.deb
 
-  # Kernel/header packages are not needed for this install and may be
-  # uninstallable on ARM64 because their meta dependencies are unavailable.
-
-  rm -f "${PACKAGES}"/pve-headers_*.deb
-  rm -f "${PACKAGES}"/proxmox-headers-*.deb
-  rm -f "${PACKAGES}"/proxmox-default-headers_*.deb
-  rm -f "${PACKAGES}"/proxmox-kernel-*.deb
-  rm -f "${PACKAGES}"/proxmox-kernel-helper_*.deb
-  rm -f "${PACKAGES}"/proxmox-default-kernel_*.deb
+	rm -f "${PACKAGES}"/pve-headers_*.deb
+	rm -f "${PACKAGES}"/proxmox-headers-*.deb
+	rm -f "${PACKAGES}"/proxmox-default-headers_*.deb
+	rm -f "${PACKAGES}"/proxmox-kernel-*.deb
+	rm -f "${PACKAGES}"/proxmox-kernel-helper_*.deb
+	rm -f "${PACKAGES}"/proxmox-default-kernel_*.deb
 }
 
 function install_server() {
@@ -933,7 +1090,7 @@ function install_server() {
 		return 1
 	fi
 
-    remove_uninstallable_packages
+	remove_uninstallable_packages
 	mapfile -t file_list < <(find "${PACKAGES}" -maxdepth 1 -name '*.deb' -print | sort)
 
 	if [ "${#file_list[@]}" -eq 0 ]; then
@@ -1027,6 +1184,12 @@ fi
 echo "Download package list from PMG repository"
 PACKAGES_PMG=$(load_packages http://download.proxmox.com/debian/pmg/dists/trixie/pmg-no-subscription/binary-amd64/Packages.gz)
 
+echo "Download package list from PVE repository"
+PACKAGES_PVE=$(load_packages http://download.proxmox.com/debian/pve/dists/trixie/pve-no-subscription/binary-amd64/Packages.gz)
+
+echo "Download package list from Proxmox devel repository"
+PACKAGES_DEVEL=$(load_packages http://download.proxmox.com/debian/devel/dists/trixie/main/binary-amd64/Packages.gz)
+
 PMG_META_VERSION=$(package_version proxmox-mailgateway all "<=" "${PMG_VERSION}")
 
 if [ -z "${PMG_META_VERSION}" ]; then
@@ -1100,7 +1263,7 @@ if [ -z "${PMG_MOBILE_QUARANTINE_UI_VERSION}" ]; then
 fi
 
 git_clone_or_fetch https://git.proxmox.com/git/proxmox-perl-rs.git
-git_checkout_subdir_version proxmox-perl-rs pmg-rs "${LIBPMG_RS_PERL_VERSION}"
+checkout_package_version proxmox-perl-rs "${LIBPMG_RS_PERL_VERSION}" libpmg-rs-perl
 
 PERLMOD_VERSION="$(
 	get_build_dependency_min_version \
@@ -1144,22 +1307,12 @@ build_make_deb_package \
 	"${LIBARCHIVE_PERL_VERSION}"
 
 echo "Download architecture-independent Proxmox dependencies"
-
-download_dependency_package "${PMG_API_DEB}" libjs-qrcodejs all
-download_dependency_package "${PMG_API_DEB}" libproxmox-acme-perl all
-download_dependency_package "${PMG_API_DEB}" libproxmox-acme-plugins all
-download_dependency_package "${PMG_API_DEB}" libproxmox-rs-perl all
-download_dependency_package "${PMG_API_DEB}" libpve-apiclient-perl all
-download_dependency_package "${PMG_API_DEB}" libpve-common-perl all
-download_dependency_package "${PMG_API_DEB}" libpve-http-server-perl all
-download_dependency_package "${PMG_API_DEB}" proxmox-enterprise-support-keyring all
-
-download_dependency_package "${PMG_GUI_DEB}" libjs-extjs all
-download_dependency_package "${PMG_GUI_DEB}" libjs-qrcodejs all
-download_dependency_package "${PMG_GUI_DEB}" proxmox-widget-toolkit all
-
-download_dependency_package "${PMG_DOCS_DEB}" libjs-extjs all
-download_dependency_package "${PMG_API_DEB}" pve-xtermjs all
+download_runtime_arch_all_dependencies \
+	"${PMG_META_DEB}" \
+	"${PMG_API_DEB}" \
+	"${PMG_GUI_DEB}" \
+	"${PMG_DOCS_DEB}" \
+	"${PMG_MOBILE_QUARANTINE_UI_DEB}"
 
 PBS_CONSTRAINT=$(get_dependency_constraint "${PMG_API_DEB}" proxmox-backup-client || true)
 
@@ -1238,6 +1391,12 @@ build_make_deb_package \
 	https://git.proxmox.com/git/proxmox-spamassassin.git \
 	proxmox-spamassassin \
 	"${PROXMOX_SPAMASSASSIN_VERSION}"
+
+shopt -s nullglob
+final_debs=("${PACKAGES}"/*.deb)
+shopt -u nullglob
+
+download_runtime_arch_all_dependencies "${final_debs[@]}"
 
 # Remove uninstallable packages from output
 remove_uninstallable_packages

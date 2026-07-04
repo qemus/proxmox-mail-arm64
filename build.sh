@@ -508,6 +508,27 @@ function latest_github_release_asset() {
 		tail -n1
 }
 
+function github_release_asset_by_tag() {
+	repo=${1}
+	tag=${2}
+	package=${3}
+
+	api_url="https://api.github.com/repos/${repo}/releases/tags/${tag}"
+
+	curl -sSfL "${api_url}" |
+		jq -r --arg package "${package}" '
+			.assets[]
+			| select(.name | test("^" + $package + "_[0-9][^_]*_arm64\\.deb$"))
+			| [
+				.name,
+				.browser_download_url
+			]
+			| @tsv
+		' |
+		sort -t '_' -k2,2V |
+		tail -n1
+}
+
 function repackage_static_package_as_arch() {
 	package=${1}
 	version=${2}
@@ -1378,14 +1399,47 @@ echo "  asset file:       ${PBS_CLIENT_FILE}"
 
 download_external_package "${PBS_CLIENT_URL}"
 
-JOURNALREADER_VERSION="1.6-1"
-TERMPROXY_VERSION="2.1.0"
+JOURNALREADER_ASSET="$(
+	github_release_asset_by_tag \
+		qemus/proxmox-backup-arm64 \
+		"${PBS_RELEASE_TAG}" \
+		proxmox-mini-journalreader
+)"
 
-download_external_package \
-	"https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_RELEASE_TAG}/proxmox-mini-journalreader_${JOURNALREADER_VERSION}_arm64.deb"
+if [ -z "${JOURNALREADER_ASSET}" ]; then
+	echo "Could not find proxmox-mini-journalreader arm64 asset in PBS release ${PBS_RELEASE_TAG}" >&2
+	exit 1
+fi
 
-download_external_package \
-	"https://github.com/qemus/proxmox-backup-arm64/releases/download/${PBS_RELEASE_TAG}/proxmox-termproxy_${TERMPROXY_VERSION}_arm64.deb"
+JOURNALREADER_FILE="${JOURNALREADER_ASSET%%$'\t'*}"
+JOURNALREADER_URL="${JOURNALREADER_ASSET#*$'\t'}"
+
+echo "Resolved proxmox-mini-journalreader:"
+echo "  release tag: ${PBS_RELEASE_TAG}"
+echo "  asset file:  ${JOURNALREADER_FILE}"
+
+download_external_package "${JOURNALREADER_URL}"
+
+TERMPROXY_ASSET="$(
+	github_release_asset_by_tag \
+		qemus/proxmox-backup-arm64 \
+		"${PBS_RELEASE_TAG}" \
+		proxmox-termproxy
+)"
+
+if [ -z "${TERMPROXY_ASSET}" ]; then
+	echo "Could not find proxmox-termproxy arm64 asset in PBS release ${PBS_RELEASE_TAG}" >&2
+	exit 1
+fi
+
+TERMPROXY_FILE="${TERMPROXY_ASSET%%$'\t'*}"
+TERMPROXY_URL="${TERMPROXY_ASSET#*$'\t'}"
+
+echo "Resolved proxmox-termproxy:"
+echo "  release tag: ${PBS_RELEASE_TAG}"
+echo "  asset file:  ${TERMPROXY_FILE}"
+
+download_external_package "${TERMPROXY_URL}"
 
 PMG_LOG_TRACKER_CONSTRAINT=$(get_dependency_constraint "${PMG_META_DEB}" pmg-log-tracker || true)
 PMG_LOG_TRACKER_VERSION=$(package_version pmg-log-tracker amd64 "$(dependency_operator "${PMG_LOG_TRACKER_CONSTRAINT}")" "$(dependency_version "${PMG_LOG_TRACKER_CONSTRAINT}")")

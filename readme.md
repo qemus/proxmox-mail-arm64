@@ -10,7 +10,7 @@ For an easier experience, you can also use the [Mail Gateway Docker container](h
 
 ## Download pre-built packages
 
-You can find the unofficial Debian packages that are created with this script at [https://github.com/qemus/proxmox-mail-arm64/releases](https://github.com/qemus/proxmox-mail-arm64/releases).
+You can find unofficial Debian packages that are created with this script at [https://github.com/qemus/proxmox-mail-arm64/releases](https://github.com/qemus/proxmox-mail-arm64/releases).
 
 With the script you can also download or install all packages of the latest release automatically.
 

@@ -446,6 +446,35 @@ function package_version() {
 		sed -E "s/^${package_name}_([^_]+)_.*/\1/"
 }
 
+function package_upstream_version() {
+	package_name=${1}
+	arch_filter=${2:-}
+	required_upstream_version=${3}
+
+	version_target=""
+
+	while IFS=';' read -r name version arch file depends; do
+		[ "${name}" = "${package_name}" ] || continue
+		[ -n "${version}" ] || continue
+
+		if [ -n "${arch_filter}" ] && [ "${arch}" != "${arch_filter}" ]; then
+			continue
+		fi
+
+		upstream=${version%%-*}
+		if ! dpkg --compare-versions "${upstream}" = "${required_upstream_version}"; then
+			continue
+		fi
+
+		if [ -z "${version_target}" ] || dpkg --compare-versions "${version}" ">>" "${version_target}"; then
+			version_target=${version}
+		fi
+	done <<<"${PACKAGES_PMG}"
+
+	[ -n "${version_target}" ] || return 1
+	echo "${version_target}"
+}
+
 function latest_github_release_asset() {
 	repo=${1}
 	package=${2}
@@ -1183,8 +1212,14 @@ PACKAGES_PVE=$(load_packages http://download.proxmox.com/debian/pve/dists/trixie
 echo "Download package list from Proxmox devel repository"
 PACKAGES_DEVEL=$(load_packages http://download.proxmox.com/debian/devel/dists/trixie/main/binary-amd64/Packages.gz)
 
-PMG_META_VERSION=$(package_version proxmox-mailgateway all "=" "${PMG_VERSION}")
+PMG_META_VERSION=$(package_upstream_version proxmox-mailgateway all "${PMG_VERSION}" || true)
 
+if [ -z "${PMG_META_VERSION}" ]; then
+	echo "Could not resolve exact proxmox-mailgateway upstream version ${PMG_VERSION}" >&2
+	exit 1
+fi
+
+echo "Using proxmox-mailgateway package version: ${PMG_META_VERSION}"
 if [ -z "${PMG_META_VERSION}" ]; then
 	echo "Could not resolve proxmox-mailgateway version for ${PMG_VERSION}" >&2
 	exit 1

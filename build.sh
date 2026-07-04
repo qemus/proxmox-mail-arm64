@@ -6,14 +6,14 @@
 set -eu
 
 function git_clone_or_fetch() {
-	url=${1}
-	name_git=${url##*/}
-	name=${name_git%.git}
+	url=${1}              # url/name.git
+	name_git=${url##*/}   # name.git
+	name=${name_git%.git} # name
 
 	if [ ! -d "${name}" ]; then
 		git clone "${url}"
 	else
-		git -C "${name}" fetch --all --tags
+		git -C "${name}" fetch --all --tags --prune
 	fi
 }
 

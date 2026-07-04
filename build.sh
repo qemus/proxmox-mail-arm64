@@ -841,7 +841,20 @@ function download_release() {
 		curl -sSfL "${release_url}" |
 			jq -r '
 				.assets[]
-				| select(.name | test("static|dbgsym|pve-headers|proxmox-headers|proxmox-default-headers") | not)
+				| select(
+					.name as $name
+					| [
+						"static",
+						"dbgsym",
+						"pve-headers",
+						"proxmox-headers",
+						"proxmox-default-headers",
+						"proxmox-mailgateway_",
+						"proxmox-mailgateway-container_"
+					]
+					| any(. as $skip; $name | contains($skip))
+					| not
+				)
 				| .browser_download_url
 			'
 	)

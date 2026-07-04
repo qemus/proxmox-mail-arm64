@@ -1212,16 +1212,20 @@ PACKAGES_PVE=$(load_packages http://download.proxmox.com/debian/pve/dists/trixie
 echo "Download package list from Proxmox devel repository"
 PACKAGES_DEVEL=$(load_packages http://download.proxmox.com/debian/devel/dists/trixie/main/binary-amd64/Packages.gz)
 
-PMG_META_VERSION=$(package_upstream_version proxmox-mailgateway all "${PMG_VERSION}" || true)
+PMG_META_LOOKUP_VERSION="${PMG_VERSION}"
+PMG_META_LOOKUP_VERSION="${PMG_META_LOOKUP_VERSION%.0}"
+
+PMG_META_VERSION=$(package_upstream_version proxmox-mailgateway all "${PMG_META_LOOKUP_VERSION}" || true)
 
 if [ -z "${PMG_META_VERSION}" ]; then
-	echo "Could not resolve exact proxmox-mailgateway upstream version ${PMG_VERSION}" >&2
+	echo "Could not resolve exact proxmox-mailgateway upstream version ${PMG_META_LOOKUP_VERSION} from requested version ${PMG_VERSION}" >&2
 	exit 1
 fi
 
+echo "Using requested PMG version: ${PMG_VERSION}"
 echo "Using proxmox-mailgateway package version: ${PMG_META_VERSION}"
 if [ -z "${PMG_META_VERSION}" ]; then
-	echo "Could not resolve proxmox-mailgateway version for ${PMG_VERSION}" >&2
+	echo "Could not resolve exact proxmox-mailgateway upstream version ${PMG_VERSION}" >&2
 	exit 1
 fi
 

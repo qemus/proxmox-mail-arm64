@@ -1234,7 +1234,7 @@ PACKAGES_PVE=$(load_packages http://download.proxmox.com/debian/pve/dists/trixie
 echo "Download package list from Proxmox devel repository"
 PACKAGES_DEVEL=$(load_packages http://download.proxmox.com/debian/devel/dists/trixie/main/binary-amd64/Packages.gz)
 
-PMG_META_VERSION=$(package_version proxmox-mailgateway all "<=" "${PMG_VERSION}")
+PMG_META_VERSION=$(package_version proxmox-mailgateway all "=" "${PMG_VERSION}")
 
 if [ -z "${PMG_META_VERSION}" ]; then
 	echo "Could not resolve proxmox-mailgateway version for ${PMG_VERSION}" >&2

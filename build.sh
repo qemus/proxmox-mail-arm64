@@ -908,6 +908,24 @@ function download_release() {
 	done
 }
 
+function remove_uninstallable_packages() {
+
+  # The meta packages are useful while building to resolve dependency versions,
+  # but they are not needed during install if all real subpackages are installed.
+  rm -f "${PACKAGES}"/proxmox-mailgateway_*.deb
+  rm -f "${PACKAGES}"/proxmox-mailgateway-container_*.deb
+
+  # Kernel/header packages are not needed for this install and may be
+  # uninstallable on ARM64 because their meta dependencies are unavailable.
+
+  rm -f "${PACKAGES}"/pve-headers_*.deb
+  rm -f "${PACKAGES}"/proxmox-headers-*.deb
+  rm -f "${PACKAGES}"/proxmox-default-headers_*.deb
+  rm -f "${PACKAGES}"/proxmox-kernel-*.deb
+  rm -f "${PACKAGES}"/proxmox-kernel-helper_*.deb
+  rm -f "${PACKAGES}"/proxmox-default-kernel_*.deb
+}
+
 function install_server() {
 
 	if [ "${#file_list[@]}" -eq 0 ]; then
@@ -915,17 +933,7 @@ function install_server() {
 		return 1
 	fi
 
-	# The meta packages are useful while building to resolve dependency versions,
-	# but they are not needed during install if all real subpackages are installed.
-	rm -f "${PACKAGES}"/proxmox-mailgateway_*.deb
-	rm -f "${PACKAGES}"/proxmox-mailgateway-container_*.deb
-
-	# Kernel/header packages are not needed for this install and may be
-	# uninstallable on ARM64 because their meta dependencies are unavailable.
-	rm -f "${PACKAGES}"/pve-headers_*.deb
-	rm -f "${PACKAGES}"/proxmox-headers-*.deb
-	rm -f "${PACKAGES}"/proxmox-default-headers_*.deb
-
+    remove_uninstallable_packages
 	mapfile -t file_list < <(find "${PACKAGES}" -maxdepth 1 -name '*.deb' -print | sort)
 
 	if [ "${#file_list[@]}" -eq 0 ]; then
@@ -1230,6 +1238,9 @@ build_make_deb_package \
 	https://git.proxmox.com/git/proxmox-spamassassin.git \
 	proxmox-spamassassin \
 	"${PROXMOX_SPAMASSASSIN_VERSION}"
+
+# Remove uninstallable packages from output
+remove_uninstallable_packages
 
 # Remove debug symbol packages from output directory.
 rm -f "${PACKAGES}"/*-dbgsym_*.deb "${PACKAGES}"/*.ddeb

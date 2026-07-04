@@ -1052,17 +1052,16 @@ function download_release() {
 			jq -r '
 				.assets[]
 				| select(
-					.name as $name
-					| [
-						"static",
-						"dbgsym",
-						"pve-headers",
-						"proxmox-headers",
-						"proxmox-default-headers",
-						"proxmox-mailgateway_",
-						"proxmox-mailgateway-container_"
-					]
-					| any(. as $skip; $name | contains($skip))
+					.name
+					| test(
+						"static"
+						+ "|dbgsym"
+						+ "|pve-headers"
+						+ "|proxmox-headers"
+						+ "|proxmox-default-headers"
+						+ "|proxmox-mailgateway_"
+						+ "|proxmox-mailgateway-container_"
+					)
 					| not
 				)
 				| .browser_download_url
@@ -1466,7 +1465,7 @@ mapfile -t final_debs < <(
 
 download_runtime_arch_all_dependencies "${final_debs[@]}"
 
-# Rename platform independant packages to _all.deb
+# Rename platform independent packages to _all.deb
 for deb in "${PACKAGES}"/*_amd64.deb; do
   [ -e "$deb" ] || continue
   arch="$(dpkg-deb -f "$deb" Architecture 2>/dev/null || true)"

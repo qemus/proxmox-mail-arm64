@@ -1,72 +1,55 @@
 ARG baseimage=debian:trixie-slim
-
-FROM ${baseimage} AS builder-stage
+FROM ${baseimage} as builder-stage
 
 ARG buildoptions
+
+# workaround for memory bug https://github.com/rust-lang/cargo/issues/10583
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN <<EOF
   set -eu
 
-  apt-get update
+  apt update
   apt-get install -y --no-install-recommends \
     build-essential \
-    ca-certificates \
     curl \
-    devscripts \
-    dpkg-dev \
-    equivs \
-    faketime \
+    ca-certificates \
+    sudo \
     git \
     lintian \
     pkg-config \
-    rsync \
-    sudo \
-    jq \
-    dh-cargo \
+    libudev-dev \
     libssl-dev \
     libapt-pkg-dev \
-    nettle-dev \
-    clang \
     libclang-dev \
+    libpam0g-dev \
+    libcrypt-dev \
+    libacl1-dev \
     libsystemd-dev \
+    libfuse3-dev \
+    libldap2-dev \
+    libzstd-dev \
+    rsync \
+    jq \
+    patchelf \
+    zlib1g-dev \
+    nettle-dev \
     uuid-dev \
-    binutils \
-    libarchive-dev
+    qemu-user \
+    qemu-user-binfmt
 
-  rm -rf /var/lib/apt/lists/*
-EOF
-
-ENV RUSTUP_TOOLCHAIN=stable
-ENV RUSTUP_INIT_SKIP_PATH_CHECK=yes
-ENV PATH="/root/.cargo/bin:${PATH}"
-
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-RUN rustup toolchain install stable && rustup default stable
-
-RUN <<EOF
-  set -eu
-
-  # Add Proxmox archive keyring
-  curl -fsSL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
-    -o /usr/share/keyrings/proxmox-archive-keyring.gpg
-
-  # Add Proxmox development repository
-  echo "deb [signed-by=/usr/share/keyrings/proxmox-archive-keyring.gpg] http://download.proxmox.com/debian/devel trixie main" \
-    > /etc/apt/sources.list.d/proxmox-devel.list
-
-  apt-get update
+  # Install Rust
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 EOF
 
 COPY . /build/
 WORKDIR /build
 
 SHELL ["/bin/bash", "-c"]
-
 RUN chmod +x ./build.sh
-RUN ./build.sh ${buildoptions}
+RUN source ~/.cargo/env && ./build.sh ${buildoptions}
 RUN touch /build/build.log
 
 FROM scratch
-
 COPY --from=builder-stage /build/*.log /build/packages/* /

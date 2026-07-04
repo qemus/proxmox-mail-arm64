@@ -841,7 +841,7 @@ function download_release() {
 		curl -sSfL "${release_url}" |
 			jq -r '
 				.assets[]
-				| select(.name | test("static|dbgsym") | not)
+				| select(.name | test("static|dbgsym|pve-headers|proxmox-headers|proxmox-default-headers") | not)
 				| .browser_download_url
 			'
 	)
@@ -861,8 +861,6 @@ function download_release() {
 			curl -sSfL "${download_url}" -o "${PACKAGES}/${file}"
 		fi
 
-		[[ "$file" == *"dbgsym"* ]] && rm "${PACKAGES}/${file}" && continue
-
 		file_list+=("${PACKAGES}/${file}")
 	done
 }
@@ -879,12 +877,11 @@ function install_server() {
 	rm -f "${PACKAGES}"/proxmox-mailgateway_*.deb
 	rm -f "${PACKAGES}"/proxmox-mailgateway-container_*.deb
 
-	# Kernel/header packages are not usable inside a container.
-	if is_container; then
-	    rm -f "${PACKAGES}"/pve-headers_*.deb
-	    rm -f "${PACKAGES}"/proxmox-headers-*.deb
-	    rm -f "${PACKAGES}"/proxmox-default-headers_*.deb
-	fi
+	# Kernel/header packages are not needed for this install and may be
+	# uninstallable on ARM64 because their meta dependencies are unavailable.
+	rm -f "${PACKAGES}"/pve-headers_*.deb
+	rm -f "${PACKAGES}"/proxmox-headers-*.deb
+	rm -f "${PACKAGES}"/proxmox-default-headers_*.deb
 
 	mapfile -t file_list < <(find "${PACKAGES}" -maxdepth 1 -name '*.deb' -print | sort)
 

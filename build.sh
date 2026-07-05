@@ -28,6 +28,8 @@ function download_package() {
 
 	echo "${package} downloading... ${url}"
 	curl -sSfL "${url}" -o "${file}"
+
+	return 0
 }
 
 function get_base() {
@@ -88,6 +90,8 @@ function download_arch_all_package_satisfying() {
 	echo "${package_name} ${version_target} downloading runtime dependency...${url}" >&2
 	curl -sSfL "${url}" -o "${file}"
 	echo "${file}"
+
+	return 0
 }
 
 function download_runtime_arch_all_dependency() {
@@ -141,6 +145,8 @@ function parse_deb_runtime_dependencies() {
 
 		printf '%s;%s;%s\n' "${package_name}" "${relation}" "${required_version}"
 	done < <(printf '%s\n' "${fields}" | tr ',' '\n')
+
+	return 0
 }
 
 function download_runtime_arch_all_dependencies() {
@@ -178,6 +184,8 @@ function download_runtime_arch_all_dependencies() {
 			fi
 		done < <(parse_deb_runtime_dependencies "${deb}")
 	done
+
+	return 0
 }
 
 function dependency_constraint_from_deb() {
@@ -399,6 +407,8 @@ function select_package() {
 	if [ -n "${file_target}" ]; then
 		echo "http://download.proxmox.com/debian/pmg/${file_target}"
 	fi
+
+	return 0
 }
 
 function set_package_info() {
@@ -409,6 +419,8 @@ function set_package_info() {
 		sed -i '\#^Origin: https://github.com/qemus/proxmox-mail-arm64$#d' debian/control
 		sed -i "s#^\(Maintainer.*\)\$#\1\nOrigin: https://github.com/qemus/proxmox-mail-arm64#" debian/control
 	fi
+
+	return 0
 }
 
 function download_external_package() {
@@ -581,6 +593,8 @@ function repackage_static_package_as_arch() {
 
 	rm -rf "${tmpdir}"
 	rm -f "${source_deb}"
+
+	return 0
 }
 
 function get_dependency_constraint() {
@@ -617,6 +631,8 @@ function download_dependency_package() {
 	else
 		download_package "${package}" "${arch}" "${PACKAGES}"
 	fi
+
+	return 0
 }
 
 function get_build_dependency_min_version() {
@@ -742,6 +758,8 @@ function build_perlmod() {
 	# Do not keep it in the final release package directory.
 	rm -f "${PERLMOD_BIN_DEB}"
 	find perlmod -maxdepth 2 -name 'perlmod-bin-dbgsym_*_*.deb' -delete 2>/dev/null || true
+
+	return 0
 }
 
 function build_libpmg_rs_perl() {
@@ -846,7 +864,6 @@ required = [
     "perlmod",
     "perlmod-macro",
     "proxmox-acme",
-    "proxmox-apt",
 ]
 
 missing = [name for name in required if name not in patches]
@@ -903,6 +920,8 @@ EOF_PATCH_CARGO
 		echo "Could not find built libpmg-rs-perl package for version ${version}" >&2
 		exit 1
 	fi
+
+	return 0
 }
 
 function prepare_pmg_log_tracker() {
@@ -956,12 +975,16 @@ override_dh_auto_install:
 EOF_RULES
 
 	chmod +x debian/rules
+
+	return 0
 }
 
 function prepare_proxmox_spamassassin() {
 	sed -i "s/_amd64\.deb/_${PACKAGE_ARCH}.deb/g" Makefile
 	sed -i "s/_amd64\.changes/_${PACKAGE_ARCH}.changes/g" Makefile
 	sed -i "s/_amd64\.buildinfo/_${PACKAGE_ARCH}.buildinfo/g" Makefile
+
+	return 0
 }
 
 function prepare_package() {
@@ -976,6 +999,8 @@ function prepare_package() {
 			prepare_proxmox_spamassassin
 			;;
 	esac
+
+	return 0
 }
 
 function build_make_deb_package() {
@@ -1004,6 +1029,8 @@ function build_make_deb_package() {
 	mv -f ./*.deb "${PACKAGES}/"
 
 	cd ..
+
+	return 0
 }
 
 function build_dpkg_package() {
@@ -1031,6 +1058,8 @@ function build_dpkg_package() {
 	cd ..
 
 	mv -f ./*.deb "${PACKAGES}/"
+
+	return 0
 }
 
 function is_container() {
@@ -1085,6 +1114,8 @@ function download_release() {
 
 		file_list+=("${PACKAGES}/${file}")
 	done
+
+	return 0
 }
 
 function remove_uninstallable_packages() {
@@ -1102,6 +1133,8 @@ function remove_uninstallable_packages() {
 	rm -f "${PACKAGES}"/proxmox-kernel-*.deb
 	rm -f "${PACKAGES}"/proxmox-kernel-helper_*.deb
 	rm -f "${PACKAGES}"/proxmox-default-kernel_*.deb
+
+	return 0
 }
 
 function install_server() {
@@ -1125,6 +1158,8 @@ function install_server() {
 	fi
 
 	rm -f -- "${file_list[@]}"
+
+	return 0
 }
 
 SUDO="${SUDO:-sudo -E}"

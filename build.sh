@@ -1115,8 +1115,11 @@ function download_release() {
 			echo "${file} already exists"
 		else
 			echo "Downloading ${file}"
-			curl -sSfL "${download_url}" -o "${PACKAGES}/${file}"
-		fi
+            if ! curl -sSfL "${download_url}" -o "${PACKAGES}/${file}"; then
+                echo "Error: failed to download release from $download_url" >&2
+                return 1
+			fi
+        fi
 
 		file_list+=("${PACKAGES}/${file}")
 	done

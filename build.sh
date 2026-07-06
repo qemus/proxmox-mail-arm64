@@ -576,7 +576,10 @@ function repackage_static_package_as_arch() {
 
 	if [ ! -e "${source_deb}" ]; then
 		echo "Downloading ${source_deb##*/}"
-		curl -sSfL "${url}" -o "${source_deb}"
+        if ! curl -sSfL "${url}" -o "${source_deb}"; then
+            echo "Error: failed to download ${source_deb} from ${url}" >&2
+            return 1
+        fi
 	fi
 
 	tmpdir="$(mktemp -d)"

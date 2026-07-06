@@ -439,11 +439,15 @@ function download_external_package() {
 
 	if [ -e "${file}" ]; then
 		echo "${file##*/} up-to-date"
-		return
+		return 0
 	fi
 
 	echo "Downloading ${file##*/}"
-	curl -fsSL "${url}" -o "${file}"
+
+    if ! curl -sSfL "${url}" -o "${file}"; then
+        echo "Error: failed to download ${package} from ${url}" >&2
+        return 1
+    fi
 }
 
 function find_package_file() {
@@ -1069,13 +1073,6 @@ function build_dpkg_package() {
 	mv -f ./*.deb "${PACKAGES}/"
 
 	return 0
-}
-
-function is_container() {
-	[ -f /.dockerenv ] ||
-	[ -f /run/.containerenv ] ||
-	[ -e /dev/.buildkit_qemu_emulator ] ||
-	grep -qaE '(docker|containerd|kubepods|libpod|buildkit)' /proc/1/cgroup 2>/dev/null
 }
 
 file_list=()

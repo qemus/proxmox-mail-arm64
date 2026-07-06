@@ -27,7 +27,11 @@ function download_package() {
 	fi
 
 	echo "${package} downloading... ${url}"
-	curl -sSfL "${url}" -o "${file}"
+
+    if ! curl -sSfL "${url}" -o "${file}"; then
+        echo "Error: failed to download ${package} from ${url}" >&2
+        return 1
+    fi
 
 	return 0
 }
@@ -88,7 +92,12 @@ function download_arch_all_package_satisfying() {
 	fi
 
 	echo "${package_name} ${version_target} downloading runtime dependency...${url}" >&2
-	curl -sSfL "${url}" -o "${file}"
+
+    if ! curl -sSfL "${url}" -o "${file}"; then
+        echo "Error: failed to download ${package} from ${url}" >&2
+        return 1
+    fi
+
 	echo "${file}"
 
 	return 0

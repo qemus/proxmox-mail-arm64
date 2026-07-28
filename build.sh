@@ -1261,9 +1261,15 @@ PACKAGES_PVE=$(load_packages http://download.proxmox.com/debian/pve/dists/trixie
 echo "Download package list from Proxmox devel repository"
 PACKAGES_DEVEL=$(load_packages http://download.proxmox.com/debian/devel/dists/trixie/main/binary-amd64/Packages.gz)
 
-PMG_META_LOOKUP_VERSION="${PMG_VERSION}"
-PMG_META_LOOKUP_VERSION="${PMG_META_LOOKUP_VERSION%.0}"
+PMG_META_LOOKUP_VERSION="${PMG_VERSION%%-*}"
+IFS=. read -r PMG_META_MAJOR PMG_META_MINOR _ <<< "${PMG_META_LOOKUP_VERSION}"
 
+if [ -z "${PMG_META_MAJOR}" ] || [ -z "${PMG_META_MINOR}" ]; then
+	echo "Invalid PMG version: ${PMG_VERSION}" >&2
+	exit 1
+fi
+
+PMG_META_LOOKUP_VERSION="${PMG_META_MAJOR}.${PMG_META_MINOR}"
 PMG_META_VERSION=$(package_upstream_version proxmox-mailgateway all "${PMG_META_LOOKUP_VERSION}" || true)
 
 if [ -z "${PMG_META_VERSION}" ]; then

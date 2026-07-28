@@ -35,6 +35,7 @@ RUN <<EOF
     rsync \
     jq \
     patchelf \
+    python3 \
     zlib1g-dev \
     nettle-dev \
     uuid-dev \

@@ -16,6 +16,7 @@ RUN <<EOF
   apt-get install -y --no-install-recommends \
     build-essential \
     curl \
+    dh-cargo \
     ca-certificates \
     sudo \
     git \

@@ -925,6 +925,7 @@ EOF_PATCH_CARGO
 		set_package_info
 	fi
 
+    RUSTUP_HOME="${RUSTUP_HOME:-${HOME}/.rustup}" \
 	dpkg-buildpackage -b -us -uc ${BUILD_PROFILES}
 
 	cd ../..

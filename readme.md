@@ -1,8 +1,11 @@
-# proxmox-mail-gateway-arm64
-
+<h1 align="center">proxmox-mail-gateway-arm64<br />
+<div align="center">
+  
 [![Build]][build_url]
 [![Version]][release_url]
 [![Size]][release_url]
+
+</div></h1>
 
 Script for building Proxmox Mail Gateway **9.x** for ARM64.
 

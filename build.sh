@@ -1351,7 +1351,18 @@ if [ -z "${PMG_MOBILE_QUARANTINE_UI_VERSION}" ]; then
 fi
 
 git_clone_or_fetch https://git.proxmox.com/git/proxmox-perl-rs.git
-checkout_package_version proxmox-perl-rs "${LIBPMG_RS_PERL_VERSION}" libpmg-rs-perl
+
+# Use newer upstream fixes if the PMG Rust package version has not changed.
+upstream_pmg_rs_version="$(
+	git -C proxmox-perl-rs show origin/HEAD:pmg-rs/debian/changelog |
+		sed -n '1s/^libpmg-rs-perl (\([^)]*\)).*/\1/p'
+)"
+
+if [ "${upstream_pmg_rs_version}" = "${LIBPMG_RS_PERL_VERSION%%+*}" ]; then
+	git_clean_and_checkout origin/HEAD proxmox-perl-rs
+else
+	checkout_package_version proxmox-perl-rs "${LIBPMG_RS_PERL_VERSION}" libpmg-rs-perl
+fi
 
 PERLMOD_VERSION="$(
 	get_build_dependency_min_version \
